@@ -28,3 +28,19 @@ function getAllTableUrls($maxTables = null) {
     }
     return $urls;
 }
+
+/**
+ * Build a public URL for a stored image path.
+ * Works for both local paths ("assets/images/x.png") and full URLs.
+ */
+function imageUrl($storedPath) {
+    if (empty($storedPath)) return null;
+
+    // Already a full URL?
+    if (strpos($storedPath, 'http') === 0) {
+        return $storedPath;
+    }
+
+    // Build from BASE_URL
+    return BASE_URL . '/' . ltrim($storedPath, '/');
+}
