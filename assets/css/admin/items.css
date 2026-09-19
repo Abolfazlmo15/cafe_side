@@ -1,0 +1,195 @@
+/* ----- BASE ----- */
+body { background: #f8f5f2; }
+
+/* ----- BUTTONS ----- */
+.btn-add { background: #6f4e37; color: white; padding: 0.5rem 1rem; border-radius: 0.5rem; text-decoration: none; border: none; font-weight: 500; transition: 0.2s; }
+.btn-add:hover { background: #4d3628; }
+
+.btn-cancel { background: #b3947e; color: white; padding: 0.5rem 1rem; border-radius: 0.5rem; text-decoration: none; display: inline-block; margin-left: 0.5rem; border: none; font-weight: 500; transition: 0.2s; }
+.btn-cancel:hover { background: #8b6b55; }
+
+/* ----- IMAGE ----- */
+.item-img { width: 60px; height: 60px; object-fit: cover; border-radius: 0.5rem; background: #e8d9cf; cursor: pointer; transition: opacity 0.2s; border: 1px solid #f0e4db; }
+.item-img:hover { opacity: 0.8; }
+
+/* ----- CLICKABLE NAME ----- */
+.clickable-name { cursor: pointer; transition: color 0.2s; color: #2d1b0e; }
+.clickable-name:hover { color: #6f4e37; text-decoration: underline; }
+
+/* ----- BADGE ----- */
+.badge { display: inline-block; padding: 0.2rem 0.8rem; border-radius: 100px; font-size: 0.75rem; font-weight: 600; }
+.badge-active { background: #d1fae5; color: #065f46; }
+.badge-inactive { background: #fee2e2; color: #991b1b; }
+
+/* ----- BUTTONS (edit/delete) ----- */
+.btn { padding: 0.3rem 0.8rem; border-radius: 0.3rem; text-decoration: none; font-size: 0.85rem; display: inline-block; border: none; font-weight: 500; transition: 0.2s; }
+.btn-edit { background: #3b82f6; color: white; }
+.btn-edit:hover { background: #2563eb; }
+.btn-delete { background: #dc2626; color: white; border: none; cursor: pointer; padding: 0.3rem 0.8rem; border-radius: 0.3rem; }
+.btn-delete:hover { background: #b91c1c; }
+
+/* ----- FORM ----- */
+.form-group { margin-bottom: 1rem; }
+.form-group label { display: block; font-weight: 600; margin-bottom: 0.3rem; color: #2d1b0e; }
+.form-group input, .form-group select { width: 100%; padding: 0.5rem; border: 1px solid #e8d9cf; border-radius: 0.5rem; background: white; color: #2d1b0e; transition: 0.2s; }
+.form-group input:focus, .form-group select:focus { border-color: #6f4e37; box-shadow: 0 0 0 3px rgba(111,78,55,0.1); outline: none; }
+.form-group input[type="file"] { padding: 0.3rem; border: none; }
+.form-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+.form-row .form-group { flex: 1; min-width: 200px; }
+.submit-btn { background: #6f4e37; color: white; border: none; padding: 0.5rem 1.5rem; border-radius: 2rem; cursor: pointer; font-weight: 600; transition: 0.2s; }
+.submit-btn:hover { background: #4d3628; }
+
+/* ----- MESSAGES ----- */
+.message { position: relative; padding: 0.6rem 2.5rem 0.6rem 1rem; border-radius: 0.5rem; margin-bottom: 1rem; transition: opacity 0.5s ease; border: 1px solid transparent; }
+.message .close-btn { position: absolute; top: 0.5rem; right: 0.5rem; cursor: pointer; font-size: 1.2rem; font-weight: bold; color: inherit; background: transparent; border: none; line-height: 1; padding: 0 0.2rem; }
+.message.fade-out { opacity: 0; }
+.message-success { background: #d1fae5; color: #065f46; border-color: #a7f3d0; }
+.message-error { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+
+/* ----- TABLE ----- */
+table { width: 100%; border-collapse: collapse; background: white; border-radius: 1rem; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.04); }
+th { text-align: left; padding: 0.8rem; background: #f3e8e0; color: #2d1b0e; font-weight: 600; }
+td { padding: 0.8rem; border-bottom: 1px solid #f0e4db; vertical-align: middle; background: white; }
+tr:last-child td { border-bottom: none; }
+
+.item-list { overflow-x: auto; }
+
+/* ----- IMAGE PREVIEW ----- */
+.image-preview-container { margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.image-preview-container .preview-label { font-weight: 500; color: #5a3f2e; font-size: 0.9rem; }
+.image-preview-container img { max-width: 100px; max-height: 100px; border-radius: 0.5rem; border: 1px solid #e8d9cf; object-fit: cover; }
+
+/* ----- MODAL ----- */
+.image-modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 9999; justify-content: center; align-items: center; animation: fadeIn 0.25s ease; }
+.image-modal.active { display: flex; }
+.image-modal .modal-content { position: relative; max-width: 92vw; max-height: 90vh; background: white; border-radius: 1.5rem; padding: 0.8rem; box-shadow: 0 30px 60px -16px rgba(0,0,0,0.3); display: flex; justify-content: center; align-items: center; overflow: visible; border: 1px solid #f0e4db; }
+.image-modal .modal-content img { max-width: 100%; max-height: 82vh; object-fit: contain; border-radius: 0.8rem; display: block; }
+.image-modal .modal-close { position: absolute; top: 0.5rem; right: 0.5rem; background: white; color: #dc2626; border: 2px solid #fca5a5; border-radius: 50%; width: 2.8rem; height: 2.8rem; font-size: 1.6rem; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.2); transition: 0.2s; display: flex; align-items: center; justify-content: center; line-height: 1; z-index: 10; }
+.image-modal .modal-close:hover { background: #dc2626; color: white; transform: scale(1.08); border-color: #dc2626; box-shadow: 0 4px 16px rgba(220,38,38,0.4); }
+.image-modal .modal-close:active { transform: scale(0.92); }
+@keyframes fadeIn { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
+
+/* ----- RESPONSIVE ----- */
+@media (max-width: 768px) {
+    .form-row { flex-direction: column; }
+    .form-row .form-group { min-width: 100%; }
+}
+
+/* ----- SCROLL‑TO‑TOP BUTTON (cozy) ----- */
+.scroll-top-btn {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: #6f4e37;
+    color: white;
+    border: none;
+    box-shadow: 0 4px 16px rgba(111, 78, 55, 0.30);
+    cursor: pointer;
+    font-size: 1.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    opacity: 0;
+    transform: translateY(20px) scale(0.9);
+    pointer-events: none;
+    z-index: 999;
+}
+.scroll-top-btn.visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+.scroll-top-btn:hover {
+    background: #4d3628;
+    transform: scale(1.06);
+    box-shadow: 0 6px 24px rgba(111, 78, 55, 0.40);
+}
+.scroll-top-btn:active {
+    transform: scale(0.92);
+}
+.scroll-top-btn i {
+    transition: 0.2s;
+}
+.scroll-top-btn:hover i {
+    transform: translateY(-2px);
+}
+
+@media (max-width: 768px) {
+    .scroll-top-btn {
+        bottom: 1.2rem;
+        right: 1.2rem;
+        width: 46px;
+        height: 46px;
+        font-size: 1.2rem;
+    }
+}
+
+/* ----- CUSTOM CATEGORY DROPDOWN ----- */
+.category-select-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+.category-input {
+    flex: 1;
+    padding-right: 2.5rem !important;
+}
+
+.category-toggle {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: #6b7280;
+    cursor: pointer;
+    padding: 0.2rem 0.5rem;
+    font-size: 1rem;
+    transition: color 0.2s;
+    z-index: 2;
+}
+.category-toggle:hover {
+    color: #2d1b0e;
+}
+
+.category-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 200px;
+    overflow-y: auto;
+    background: white;
+    border: 1px solid #e8d9cf;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    list-style: none;
+    padding: 0.3rem 0;
+    margin: 0.2rem 0 0 0;
+    z-index: 100;
+    display: none;
+}
+.category-dropdown li {
+    padding: 0.5rem 0.8rem;
+    cursor: pointer;
+    transition: background 0.15s;
+    color: #2d1b0e;
+}
+.category-dropdown li:hover {
+    background: #f3e8e0;
+}
+.category-dropdown li:active {
+    background: #e8d9cf;
+}
+/* ----- CATEGORY DROPDOWN HIGHLIGHT ----- */
+.category-dropdown li.selected-category {
+    background: #e8d9cf !important;
+    font-weight: 600;
+}

@@ -1,0 +1,63 @@
+.form-group { margin-bottom: 1.2rem; }
+.form-group label { display: block; font-weight: 600; margin-bottom: 0.3rem; color: #2d1b0e; }
+.form-group input[type="text"], .form-group input[type="password"], .form-group input[type="number"], .form-group input[type="email"], .form-group textarea {
+    width: 100%;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid #e8d9cf;
+    border-radius: 0.5rem;
+    font-size: 1rem;
+    background: white;
+    color: #2d1b0e;
+    transition: 0.2s;
+    font-family: inherit;
+}
+.form-group input:focus, .form-group textarea:focus {
+    border-color: #6f4e37;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(111,78,55,0.1);
+}
+.form-group .help { font-size: 0.85rem; color: #6b7280; margin-top: 0.2rem; }
+.submit-btn {
+    background: #6f4e37;
+    color: white;
+    border: none;
+    padding: 0.6rem 2rem;
+    border-radius: 2rem;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s;
+}
+.submit-btn:hover { background: #4d3628; }
+
+/* ----- MESSAGES ----- */
+.message {
+    position: relative;
+    padding: 0.6rem 2.5rem 0.6rem 1rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+    transition: opacity 0.5s ease;
+    border: 1px solid transparent;
+}
+.message .close-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    cursor: pointer;
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: inherit;
+    background: transparent;
+    border: none;
+    line-height: 1;
+    padding: 0 0.2rem;
+}
+.message.fade-out { opacity: 0; }
+.message-success { background: #d1fae5; color: #065f46; border-color: #a7f3d0; }
+.message-error { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+
+/* ----- RESPONSIVE ----- */
+@media (max-width: 600px) {
+    .form-group input, .form-group textarea { font-size: 0.95rem; }
+    .submit-btn { width: 100%; justify-content: center; }
+}

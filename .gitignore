@@ -1,0 +1,27 @@
+# Local environment & IDE
+.env
+.vscode/
+.idea/
+*.log
+*.bak
+*.tmp
+
+# OS junk
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Node (if ever used)
+node_modules/
+package-lock.json
+
+# Local DB dumps & backups
+*.sql
+*.sql.gz
+
+# Real config (never commit real secrets)
+src/config.php
+
+# Test/dev-only files
+public/tests/
+utils/generate_qr_urls.php
