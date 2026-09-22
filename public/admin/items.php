@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../src/auth.php';
 require_once __DIR__ . '/../../src/database.php';
 require_once __DIR__ . '/../../src/urls.php';
 require_once __DIR__ . '/../../src/layout/AdminLayout.php';
+require_once __DIR__ . '/../../src/api.php';   // ← ADD THIS LINE
 
 $pdo = getDbConnection();
 
@@ -87,6 +88,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         $stmt->execute([$imagePath, $newId]);
                     }
                 }
+
+                apiBumpVersion($pdo);
+
                 $_SESSION['message'] = "✅ Item added successfully!";
                 $_SESSION['message_type'] = 'success';
                 header('Location: items.php');
@@ -146,6 +150,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         }
                     }
                 }
+
+                apiBumpVersion($pdo); 
+
                 $_SESSION['message'] = "✅ Item updated successfully!";
                 $_SESSION['message_type'] = 'success';
                 $redirectAfterEdit = true;
@@ -169,6 +176,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             }
             $stmt = $pdo->prepare("DELETE FROM menu_items WHERE id = ?");
             $stmt->execute([$id]);
+
+            apiBumpVersion($pdo);
+
             $_SESSION['message'] = "🗑️ Item deleted successfully.";
             $_SESSION['message_type'] = 'success';
             header('Location: items.php');

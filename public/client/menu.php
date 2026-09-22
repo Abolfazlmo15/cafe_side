@@ -11,6 +11,76 @@ session_start(); // start session to check pending quantities
 $pdo = getDbConnection();
 $table = isset($_GET['table']) ? (int)$_GET['table'] : 0;
 
+
+// ================================================================
+// ====== JSON API BRANCHES (Phase 1) ======
+// ================================================================
+// These serve JSON to the modern client. The legacy HTML
+// endpoints below keep working unchanged.
+require_once __DIR__ . '/../../src/api.php';
+
+if (isset($_GET['api'])) {
+    $apiEndpoint = $_GET['api'];
+    $apiTable    = isset($_GET['table']) ? (int)$_GET['table'] : 0;
+    $apiToken    = isset($_GET['token']) ? $_GET['token'] : ($_COOKIE['device_token'] ?? '');
+
+    if ($apiEndpoint === 'menu') {
+        // Full menu response — used on first page load
+        $menu = apiBuildMenuData($pdo);
+        apiRespondJson([
+            'version'    => apiGetVersion($pdo),
+            'server_time' => date('c'),
+            'table'      => apiBuildTableData($pdo, $apiTable),
+            'categories' => $menu['categories'],
+            'items'      => $menu['items'],
+        ]);
+    }
+
+    if ($apiEndpoint === 'poll') {
+        // Combined polling endpoint with version cursor
+        $clientVersion = isset($_GET['version']) ? (int)$_GET['version'] : 0;
+        $serverVersion = apiGetVersion($pdo);
+
+        // If client's version matches ours, nothing to send
+        if ($clientVersion > 0 && $clientVersion === $serverVersion) {
+            apiRespondJson([
+                'unchanged' => true,
+                'version'   => $serverVersion,
+            ]);
+        }
+
+        // Something changed (or first poll) — send full payload
+        $menu = apiBuildMenuData($pdo);
+        apiRespondJson([
+            'unchanged' => false,
+            'version'   => $serverVersion,
+            'table'     => apiBuildTableData($pdo, $apiTable),
+            'menu'      => [
+                'categories' => $menu['categories'],
+                'items'      => $menu['items'],
+            ],
+            'orders'    => apiBuildOrdersData($pdo, $apiTable, $apiToken),
+            'about'     => apiBuildAboutData($pdo),
+        ]);
+    }
+
+    if ($apiEndpoint === 'about') {
+        apiRespondJson(apiBuildAboutData($pdo));
+    }
+
+    if ($apiEndpoint === 'version') {
+        // Tiny endpoint for debugging — just returns current version
+        apiRespondJson(['version' => apiGetVersion($pdo)]);
+    }
+
+    // Unknown endpoint
+    apiRespondJson(['error' => 'Unknown API endpoint'], 404);
+}
+// ====== END JSON API BRANCHES ======
+// ================================================================
+// Everything below this line is the original HTML page logic.
+
+
 // ================================================================
 // ====== DEVICE TOKEN HANDLING ======
 // ================================================================

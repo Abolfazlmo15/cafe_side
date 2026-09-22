@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../src/auth.php';
 require_once __DIR__ . '/../../src/database.php';
 require_once __DIR__ . '/../../src/urls.php';
 require_once __DIR__ . '/../../src/layout/AdminLayout.php';
+require_once __DIR__ . '/../../src/api.php'; 
 
 $pdo = getDbConnection();
 
@@ -219,6 +220,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_qr'])) {
             else $inactiveCount++;
         }
 
+        apiBumpVersion($pdo);
+
         // ---- CHANGED: use session flash and redirect ----
         if ($editSuccess) {
             $_SESSION['flash_message'] = $editMessage;
@@ -272,6 +275,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_qr'])) {
                 }
                 $stmt = $pdo->prepare("UPDATE tables SET qr_image_path = ? WHERE table_number = ?");
                 $stmt->execute([$cleanPath, $tableNum]);
+                apiBumpVersion($pdo);
                 $uploadMessage = "✅ QR image uploaded for Table $tableNum";
                 $uploadSuccess = true;
 
@@ -314,6 +318,7 @@ if (isset($_GET['delete_qr']) && is_numeric($_GET['delete_qr'])) {
     }
     $stmt = $pdo->prepare("DELETE FROM tables WHERE table_number = ?");
     $stmt->execute([$tableNum]);
+    apiBumpVersion($pdo);
     $deleteMessage = "🗑️ QR record deleted for Table $tableNum";
     // Refresh existing
     $stmt = $pdo->query("SELECT table_number, qr_code_url, qr_image_path FROM tables ORDER BY table_number");
@@ -347,6 +352,7 @@ if (isset($_GET['add_qr'])) {
         $url = getTableQRUrl($available);
         $stmt = $pdo->prepare("INSERT INTO tables (table_number, qr_code_url) VALUES (?, ?)");
         $stmt->execute([$available, $url]);
+        apiBumpVersion($pdo);
         $addMessage = "✅ QR row added for Table #$available";
         // Refresh existing
         $stmt = $pdo->query("SELECT table_number, qr_code_url, qr_image_path FROM tables ORDER BY table_number");
