@@ -6,7 +6,7 @@ session_start();
 
 // If already logged in, redirect to admin orders
 if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
-    header('Location: /cafe-qr/public/admin/orders.php');
+    header('Location: ' . URL_ADMIN_ORDERS);
     exit;
 }
 

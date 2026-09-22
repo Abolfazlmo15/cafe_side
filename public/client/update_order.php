@@ -15,7 +15,7 @@ try {
     $stmt = $pdo->prepare("UPDATE orders SET is_ready = 1, updated_at = NOW() WHERE id = ?");
     $stmt->execute([$orderId]);
     if (empty($_SERVER['HTTP_X_REQUESTED_WITH']) || $_SERVER['HTTP_X_REQUESTED_WITH'] != 'XMLHttpRequest') {
-        header('Location: /cafe-qr/public/admin/orders.php');
+        header('Location: ' . URL_ADMIN_ORDERS);
         exit;
     }
     echo json_encode(['success' => true]);

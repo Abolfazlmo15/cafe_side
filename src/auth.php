@@ -1,14 +1,12 @@
 <?php
-// src/auth.php – Reusable authentication check
-// Redirects to /auth/login.php
+require_once __DIR__ . '/urls.php';
+ini_set('session.gc_probability', '0');
 
-// Start session only if not already started
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: /cafe-qr/public/auth/login.php');
+    header('Location: ' . URL_LOGIN);
     exit;
 }
-        

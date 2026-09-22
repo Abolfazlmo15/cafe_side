@@ -1,5 +1,4 @@
 <?php
-// public/index.php – redirect to client menu
-header('Location: /cafe-qr/public/client/menu.php');
+require_once __DIR__ . '/../src/urls.php';
+header('Location: ' . URL_MENU);
 exit;
-    

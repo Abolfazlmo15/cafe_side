@@ -20,7 +20,7 @@ package-lock.json
 *.sql.gz
 
 # Real config (never commit real secrets)
-src/config.php
+# src/config.php
 
 # Test/dev-only files
 public/tests/
