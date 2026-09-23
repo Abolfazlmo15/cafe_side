@@ -666,3 +666,222 @@
         padding: 0.45rem 0.9rem;
     }
 }
+/* ============================================================
+   PHASE 5 — Real-time admin console styles
+   ============================================================ */
+
+/* ---- Sound toggle button ---- */
+.btn-sound {
+    background: #fff;
+    color: #8b6b55;
+    border: 1.5px solid #e8d9cf;
+    width: 40px;
+    height: 40px;
+    border-radius: 0.55rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    transition: 0.18s;
+    font-family: inherit;
+    padding: 0;
+    flex-shrink: 0;
+}
+.btn-sound:hover { background: #f3e8e0; border-color: #b3947e; }
+.btn-sound.active {
+    background: #6f4e37;
+    color: #fff;
+    border-color: #6f4e37;
+}
+
+/* ---- Row flash for newly-arrived orders ---- */
+.order-table tr.row-flash {
+    animation: rowFlashPulse 3s ease-out;
+}
+@keyframes rowFlashPulse {
+    0%   { background: #fef3c7; box-shadow: inset 5px 0 0 #f59e0b; }
+    15%  { background: #fef3c7; box-shadow: inset 5px 0 0 #f59e0b; }
+    40%  { background: #fef9e7; box-shadow: inset 5px 0 0 rgba(245, 158, 11, 0.6); }
+    100% { background: transparent; box-shadow: none; }
+}
+
+/* ---- New-order toast ---- */
+.new-order-toast {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.85rem 1rem 0.85rem 1.1rem;
+    background: #fff;
+    border-radius: 1.1rem;
+    box-shadow:
+        0 20px 50px -12px rgba(80, 40, 20, 0.30),
+        0 4px 12px rgba(0, 0, 0, 0.06);
+    border: 1px solid #f0e4db;
+    border-left: 5px solid #f59e0b;
+    z-index: 1100;
+    max-width: 380px;
+    min-width: 300px;
+    animation: toastIn 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.toast-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #fef3c7;
+    color: #d97706;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.05rem;
+    flex-shrink: 0;
+    animation: toastIconPulse 1.2s ease-out;
+}
+@keyframes toastIconPulse {
+    0%, 100% { transform: scale(1); }
+    30%      { transform: scale(1.15); }
+}
+.toast-body { flex: 1; min-width: 0; }
+.toast-title {
+    font-weight: 700;
+    color: #2d1b0e;
+    font-size: 0.95rem;
+    line-height: 1.3;
+    margin-bottom: 0.15rem;
+}
+.toast-sub {
+    font-size: 0.82rem;
+    color: #8b6b55;
+    line-height: 1.3;
+}
+.toast-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-shrink: 0;
+}
+.toast-btn {
+    border: none;
+    font-family: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.15s;
+    border-radius: 0.5rem;
+}
+.toast-btn-view {
+    background: #6f4e37;
+    color: #fff;
+    padding: 0.45rem 0.9rem;
+    font-size: 0.82rem;
+}
+.toast-btn-view:hover {
+    background: #4d3628;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(111, 78, 55, 0.35);
+}
+.toast-btn-close {
+    background: transparent;
+    color: #8b6b55;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    line-height: 1;
+    padding: 0;
+}
+.toast-btn-close:hover { background: #fef2f2; color: #dc2626; }
+
+/* Toast transition */
+.toast-slide-enter-active, .toast-slide-leave-active {
+    transition: all 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.toast-slide-enter-from {
+    opacity: 0;
+    transform: translateY(30px) scale(0.96);
+}
+.toast-slide-leave-to {
+    opacity: 0;
+    transform: translateY(20px) scale(0.96);
+}
+
+@media (max-width: 640px) {
+    .new-order-toast {
+        left: 1rem;
+        right: 1rem;
+        bottom: 1rem;
+        max-width: none;
+        min-width: 0;
+    }
+}
+
+/* ---- Calendar polish ---- */
+.calendar-body {
+    overflow: hidden;
+}
+.calendar-grid {
+    transition: opacity 0.2s ease, transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.calendar-grid.is-loading {
+    opacity: 0.4;
+}
+.slide-next .calendar-grid {
+    animation: slideInRight 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.slide-prev .calendar-grid {
+    animation: slideInLeft 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes slideInRight {
+    from { opacity: 0; transform: translateX(14px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideInLeft {
+    from { opacity: 0; transform: translateX(-14px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+.calendar-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    color: #6f4e37;
+    font-size: 1.3rem;
+    z-index: 5;
+}
+.calendar-body { position: relative; }
+
+.calendar-footer {
+    display: flex;
+    justify-content: center;
+    margin-top: 0.6rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #f0e4db;
+}
+.calendar-today-btn {
+    background: #f3e8e0;
+    color: #6f4e37;
+    border: none;
+    padding: 0.4rem 0.9rem;
+    border-radius: 0.5rem;
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    transition: 0.15s;
+}
+.calendar-today-btn:hover {
+    background: #6f4e37;
+    color: #fff;
+    transform: translateY(-1px);
+}
+.calendar-today-btn i { font-size: 0.85rem; }
