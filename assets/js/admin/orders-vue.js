@@ -1,5 +1,6 @@
 // assets/js/admin/orders-vue.js – Vue 3 admin orders (with Jalali calendar)
 // ==========================================================================
+// Phase 3: Page Visibility API + exponential backoff + reconnect indicator.
 
 function startOrdersApp() {
     if (typeof Vue === 'undefined') {
@@ -7,12 +8,16 @@ function startOrdersApp() {
         return;
     }
 
-    const { createApp, reactive, computed, nextTick } = Vue;
+    const { createApp, reactive, computed } = Vue;
     const initial = window.__ORDERS_DATA__ || {};
 
-    // ================================================================
-    // ====== STORE ======
-    // ================================================================
+    const POLL = {
+        baseMs:     5000,
+        initialMs:  2000,
+        maxMs:      60000,
+        multiplier: 2,
+    };
+
     const store = reactive({
         date:           initial.date || '',
         version:        initial.version || 0,
@@ -22,7 +27,6 @@ function startOrdersApp() {
         minDate:        initial.minDate || '',
         maxDate:        initial.maxDate || '',
 
-        // Calendar state
         calendarOpen:       false,
         calendarYear:       initial.jalaliYear || 1400,
         calendarMonth:      initial.jalaliMonth || 1,
@@ -32,20 +36,22 @@ function startOrdersApp() {
         calendarMonthName:  '',
         calendarLoading:    false,
 
-        // UI state
         showCompleted: localStorage.getItem('orders_showCompleted') !== 'false',
         openOrderId:   null,
         markingReady:  null,
 
-        // Polling
-        polling: { inFlight: false, failures: 0, intervalId: null },
+        polling: {
+            inFlight:          false,
+            failures:          0,
+            currentIntervalMs: POLL.baseMs,
+            timerId:           null,
+            isVisible:         typeof document !== 'undefined' ? !document.hidden : true,
+            lastSuccessAt:     null,
+        },
     });
 
     window.__ORDERS_STORE__ = store;
 
-    // ================================================================
-    // ====== HELPERS ======
-    // ================================================================
     function formatPrice(n) {
         return ('' + n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     }
@@ -88,7 +94,6 @@ function startOrdersApp() {
     function openOrderModal(orderId) { store.openOrderId = orderId; }
     function closeOrderModal()       { store.openOrderId = null; }
 
-    // ---- Calendar helpers ----
     function toggleCalendar() {
         store.calendarOpen = !store.calendarOpen;
         if (store.calendarOpen) loadCalendar(store.calendarYear, store.calendarMonth);
@@ -132,9 +137,6 @@ function startOrdersApp() {
         navigateToDate(day.gregorian);
     }
 
-    // ================================================================
-    // ====== COMPUTED ======
-    // ================================================================
     const visibleOrders = computed(() => {
         if (store.showCompleted) return store.orders;
         return store.orders.filter(o => !o.is_ready);
@@ -142,11 +144,29 @@ function startOrdersApp() {
     const pendingCount = computed(() => store.orders.filter(o => !o.is_ready).length);
     const readyCount   = computed(() => store.orders.filter(o =>  o.is_ready).length);
 
-    // ================================================================
-    // ====== POLLING ======
-    // ================================================================
+    function stopPolling() {
+        if (store.polling.timerId !== null) {
+            clearTimeout(store.polling.timerId);
+            store.polling.timerId = null;
+        }
+    }
+
+    function scheduleNext(delayMs) {
+        stopPolling();
+        store.polling.timerId = setTimeout(runPollCycle, delayMs);
+    }
+
+    function runPollCycle() {
+        store.polling.timerId = null;
+        pollServer().finally(() => {
+            if (store.polling.isVisible) {
+                scheduleNext(store.polling.currentIntervalMs);
+            }
+        });
+    }
+
     function pollServer() {
-        if (store.polling.inFlight) return;
+        if (store.polling.inFlight) return Promise.resolve();
         store.polling.inFlight = true;
 
         const url = 'orders.php?api=poll'
@@ -154,24 +174,45 @@ function startOrdersApp() {
             + '&version=' + encodeURIComponent(store.version)
             + '&_=' + Date.now();
 
-        fetch(url)
+        return fetch(url)
             .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
             .then(data => {
                 store.polling.failures = 0;
+                store.polling.currentIntervalMs = POLL.baseMs;
+                store.polling.lastSuccessAt = Date.now();
+
                 if (data.unchanged) return;
                 if (data.version) store.version = data.version;
                 if (data.orders)  store.orders = data.orders;
             })
             .catch(err => {
                 store.polling.failures++;
-                console.warn('[orders-vue] Poll failed:', err);
+                const backoff = POLL.baseMs * Math.pow(POLL.multiplier, store.polling.failures);
+                store.polling.currentIntervalMs = Math.min(backoff, POLL.maxMs);
+
+                console.warn(
+                    '[orders-vue] Poll failed (attempt ' + store.polling.failures + ') — '
+                    + 'next retry in ' + store.polling.currentIntervalMs + 'ms:',
+                    err
+                );
             })
             .finally(() => { store.polling.inFlight = false; });
     }
 
-    // ================================================================
-    // ====== COMPONENTS ======
-    // ================================================================
+    document.addEventListener('visibilitychange', () => {
+        const nowVisible = !document.hidden;
+        if (nowVisible === store.polling.isVisible) return;
+
+        store.polling.isVisible = nowVisible;
+
+        if (nowVisible) {
+            store.polling.failures = 0;
+            store.polling.currentIntervalMs = POLL.baseMs;
+            runPollCycle();
+        } else {
+            stopPolling();
+        }
+    });
 
     const JalaliCalendar = {
         template: `
@@ -216,6 +257,19 @@ function startOrdersApp() {
                 nextMonth: () => changeCalendarMonth(1),
                 pick: pickCalendarDay,
             };
+        }
+    };
+
+    const ReconnectingIndicator = {
+        template: `
+            <div v-if="show" class="reconnecting-indicator">
+                <i class="fas fa-circle-notch fa-spin"></i>
+                <span>Reconnecting…</span>
+            </div>
+        `,
+        setup() {
+            const show = computed(() => store.polling.failures >= 2);
+            return { show };
         }
     };
 
@@ -341,7 +395,7 @@ function startOrdersApp() {
         template: `
             <div v-if="order" class="order-modal active" @click.self="close">
                 <div class="order-modal-content">
-                    <button class="order-modal-close" @click="close">×</button>
+                    <button class="order-modal-close" @click="close">&times;</button>
                     <h2><i class="fas fa-receipt"></i> Order #{{ order.id }}</h2>
                     <div class="order-meta">
                         <span><i class="fas fa-chair"></i> Table {{ order.table }}</span>
@@ -378,9 +432,10 @@ function startOrdersApp() {
     };
 
     const OrdersApp = {
-        components: { Toolbar, OrdersTable, OrderItemsModal },
+        components: { Toolbar, OrdersTable, OrderItemsModal, ReconnectingIndicator },
         template: `
             <div>
+                <ReconnectingIndicator></ReconnectingIndicator>
                 <Toolbar></Toolbar>
                 <OrdersTable></OrdersTable>
                 <OrderItemsModal></OrderItemsModal>
@@ -388,9 +443,6 @@ function startOrdersApp() {
         `
     };
 
-    // ================================================================
-    // ====== GLOBAL: close calendar on outside click ======
-    // ================================================================
     document.addEventListener('click', function (e) {
         if (!store.calendarOpen) return;
         const popup = document.querySelector('.calendar-popup');
@@ -404,9 +456,6 @@ function startOrdersApp() {
         if (e.key === 'Escape' && store.openOrderId !== null) store.openOrderId = null;
     });
 
-    // ================================================================
-    // ====== MOUNT ======
-    // ================================================================
     const mountEl = document.getElementById('vue-orders-root');
     if (mountEl) {
         try {
@@ -417,8 +466,7 @@ function startOrdersApp() {
         }
     }
 
-    setTimeout(pollServer, 2000);
-    store.polling.intervalId = setInterval(pollServer, 5000);
+    scheduleNext(POLL.initialMs);
 }
 
 if (document.readyState === 'loading') {

@@ -277,3 +277,56 @@ function apiBuildOrdersListData($pdo, $date) {
     }
     return $out;
 }
+/**
+ * Build the full items list for the admin items page.
+ * Returns items + unique categories + fully-qualified image URLs.
+ */
+function apiBuildItemsListData($pdo) {
+    $stmt = $pdo->query("
+        SELECT id, name, price, category, description, image_path, available, sort_order
+        FROM menu_items
+        ORDER BY
+            CASE WHEN sort_order != 0 THEN 0 ELSE 1 END,
+            sort_order ASC,
+            name ASC
+    ");
+    $items = $stmt->fetchAll();
+
+    $categories = [];
+    $itemsOut = [];
+
+    foreach ($items as $item) {
+        $cat = $item['category'] ?: 'Other';
+        if (!in_array($cat, $categories, true)) {
+            $categories[] = $cat;
+        }
+
+        // Build image URL with cache-buster (same logic as apiBuildMenuData)
+        $imageUrl = null;
+        if (!empty($item['image_path'])) {
+            $relativePath = ltrim($item['image_path'], '/');
+            $imageUrl = BASE_URL . '/' . $relativePath;
+            $fullPath = __DIR__ . '/../' . $relativePath;
+            if (file_exists($fullPath)) {
+                $imageUrl .= '?v=' . filemtime($fullPath);
+            }
+        }
+
+        $itemsOut[] = [
+            'id'          => (int)$item['id'],
+            'name'        => $item['name'],
+            'price'       => (int)$item['price'],
+            'category'    => $cat,
+            'description' => $item['description'] ?? 'Served with love',
+            'image'       => $imageUrl,
+            'available'   => (int)$item['available'] === 1,
+            'sort_order'  => (int)$item['sort_order'],
+        ];
+    }
+    sort($categories);
+
+    return [
+        'items'      => $itemsOut,
+        'categories' => $categories,
+    ];
+}

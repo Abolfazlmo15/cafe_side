@@ -1,5 +1,6 @@
 // assets/js/client/menu-vue.js – Vue 3 app for the customer menu
 // ====================================================================
+// Phase 3: Page Visibility API + exponential backoff + reconnect indicator.
 
 function startMenuApp() {
     if (typeof Vue === 'undefined') {
@@ -11,9 +12,18 @@ function startMenuApp() {
     const initial = window.__INITIAL_DATA__ || {};
 
     // ================================================================
+    // ====== POLL CONFIG ======
+    // ================================================================
+    const POLL = {
+        baseMs:        5000,    // normal interval
+        initialMs:     2000,    // first poll delay after mount
+        maxMs:         60000,   // backoff ceiling
+        multiplier:    2,       // backoff factor
+    };
+
+    // ================================================================
     // ====== SANITIZATION HELPERS ======
     // ================================================================
-    // Remove any cart entry with qty ≤ 0, non-numeric ID, or ID not in menu.
     function sanitizeCart(rawCart, validIds) {
         const clean = {};
         if (!rawCart || typeof rawCart !== 'object') return clean;
@@ -28,7 +38,6 @@ function startMenuApp() {
         return clean;
     }
 
-    // Build a lookup of valid item IDs from the initial menu.
     function buildValidIds(menu) {
         const ids = {};
         if (menu && Array.isArray(menu.items)) {
@@ -54,7 +63,6 @@ function startMenuApp() {
             categories: (initial.menu && initial.menu.categories) || ['All'],
             items: (initial.menu && initial.menu.items) || []
         },
-        // ← sanitized on boot
         cart: sanitizeCart(initial.cart, validIds),
         orders: {
             pending: (initial.orders && initial.orders.pending_order_ids) || [],
@@ -69,10 +77,16 @@ function startMenuApp() {
                 ? (initial.tableInvalidMessage || '')
                 : ''
         },
-        polling: { inFlight: false, failures: 0, intervalId: null }
+        polling: {
+            inFlight:         false,
+            failures:         0,
+            currentIntervalMs: POLL.baseMs,
+            timerId:          null,
+            isVisible:        typeof document !== 'undefined' ? !document.hidden : true,
+            lastSuccessAt:    null,
+        }
     });
 
-    // Expose for console debugging: window.__STORE__.cart
     window.__STORE__ = store;
 
     function formatPrice(n) {
@@ -242,7 +256,6 @@ function startMenuApp() {
         }
     };
 
-    // --- CartBar (floating bottom bar) ---
     const CartBar = {
         template: `
             <div v-if="itemCount > 0" class="cart-bar">
@@ -277,13 +290,11 @@ function startMenuApp() {
                     alert('Ordering is disabled – invalid table.');
                     return;
                 }
-                // Re-sanitize one more time before submit
                 const clean = sanitizeCart(store.cart, validIds);
                 if (Object.keys(clean).length === 0) {
                     alert('Please select at least one item.');
                     return;
                 }
-                // Populate the hidden form inputs and submit
                 document.getElementById('itemsJson').value = JSON.stringify(clean);
                 document.getElementById('orderForm').submit();
             }
@@ -291,10 +302,25 @@ function startMenuApp() {
         }
     };
 
+    // --- NEW in Phase 3: reconnecting indicator ---
+    const ReconnectingIndicator = {
+        template: `
+            <div v-if="show" class="reconnecting-indicator">
+                <i class="fas fa-circle-notch fa-spin"></i>
+                <span>Reconnecting…</span>
+            </div>
+        `,
+        setup() {
+            const show = computed(() => store.polling.failures >= 2);
+            return { show };
+        }
+    };
+
     const MenuApp = {
-        components: { CategoryPills, MenuGrid, Banner, ErrorAlert, ImageModal, CartBar },
+        components: { CategoryPills, MenuGrid, Banner, ErrorAlert, ImageModal, CartBar, ReconnectingIndicator },
         template: `
             <div>
+                <ReconnectingIndicator></ReconnectingIndicator>
                 <Banner></Banner>
                 <ErrorAlert></ErrorAlert>
                 <CategoryPills></CategoryPills>
@@ -379,52 +405,115 @@ function startMenuApp() {
     }
 
     // ================================================================
-    // ====== POLLING ======
+    // ====== POLLING (Phase 3 version) ======
     // ================================================================
+    function stopPolling() {
+        if (store.polling.timerId !== null) {
+            clearTimeout(store.polling.timerId);
+            store.polling.timerId = null;
+        }
+    }
+
+    function scheduleNext(delayMs) {
+        stopPolling();
+        store.polling.timerId = setTimeout(runPollCycle, delayMs);
+    }
+
+    function runPollCycle() {
+        store.polling.timerId = null;
+        pollServer().finally(() => {
+            if (store.polling.isVisible) {
+                scheduleNext(store.polling.currentIntervalMs);
+            }
+        });
+    }
+
     function pollServer() {
-        if (store.polling.inFlight) return;
+        if (store.polling.inFlight) return Promise.resolve();
         store.polling.inFlight = true;
+
         const url = 'menu.php?api=poll'
             + '&version=' + encodeURIComponent(store.menu.version)
             + '&table='   + encodeURIComponent(store.table.number)
             + '&token='   + encodeURIComponent(store.deviceToken)
             + '&_='       + Date.now();
-        fetch(url)
-            .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+
+        return fetch(url)
+            .then(r => {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
             .then(data => {
                 store.polling.failures = 0;
+                store.polling.currentIntervalMs = POLL.baseMs;
+                store.polling.lastSuccessAt = Date.now();
+
                 if (data.unchanged) return;
+
                 if (data.version) store.menu.version = data.version;
+
                 if (data.menu) {
                     store.menu.items = data.menu.items || [];
                     store.menu.categories = data.menu.categories || ['All'];
-                    // Rebuild valid ID set
+
                     const newValid = buildValidIds(data.menu);
                     for (const k in validIds) delete validIds[k];
                     Object.assign(validIds, newValid);
-                    // Drop cart entries for items that no longer exist
+
                     const cleaned = sanitizeCart(store.cart, validIds);
                     for (const k in store.cart) delete store.cart[k];
                     Object.assign(store.cart, cleaned);
+
                     if (store.ui.activeCategory !== 'All'
                         && !store.menu.categories.includes(store.ui.activeCategory)) {
                         store.ui.activeCategory = 'All';
                     }
                 }
+
                 if (data.table) {
                     store.table.valid = !!data.table.valid;
                     if (!store.table.valid) store.ui.errorMessage = data.table.message || '';
                 }
+
                 if (data.orders) {
                     store.orders.pending = data.orders.pending_order_ids || [];
                     store.orders.ready = data.orders.ready_order_ids || [];
                     store.orders.activeItems = data.orders.active_items || [];
                 }
+
                 if (data.about) updateAbout(data.about);
             })
-            .catch(err => { store.polling.failures++; console.warn('Poll failed:', err); })
-            .finally(() => { store.polling.inFlight = false; });
+            .catch(err => {
+                store.polling.failures++;
+                const backoff = POLL.baseMs * Math.pow(POLL.multiplier, store.polling.failures);
+                store.polling.currentIntervalMs = Math.min(backoff, POLL.maxMs);
+
+                console.warn(
+                    '[menu-vue] Poll failed (attempt ' + store.polling.failures + ') — '
+                    + 'next retry in ' + store.polling.currentIntervalMs + 'ms:',
+                    err
+                );
+            })
+            .finally(() => {
+                store.polling.inFlight = false;
+            });
     }
+
+    // ---- Page Visibility API ----
+    document.addEventListener('visibilitychange', () => {
+        const nowVisible = !document.hidden;
+        if (nowVisible === store.polling.isVisible) return;
+
+        store.polling.isVisible = nowVisible;
+
+        if (nowVisible) {
+            store.polling.failures = 0;
+            store.polling.currentIntervalMs = POLL.baseMs;
+            runPollCycle();
+        } else {
+            stopPolling();
+        }
+    });
 
     // ================================================================
     // ====== MOUNT VUE ======
@@ -442,12 +531,10 @@ function startMenuApp() {
     }
 
     if (store.table.number > 0 && store.deviceToken) {
-        setTimeout(pollServer, 2000);
-        store.polling.intervalId = setInterval(pollServer, 5000);
+        scheduleNext(POLL.initialMs);
     }
 }
 
-// Robust mount: handle the case where DOMContentLoaded has already fired
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', startMenuApp);
 } else {

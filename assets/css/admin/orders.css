@@ -625,3 +625,44 @@
         margin-bottom: 0.15rem;
     }
 }
+/* ============================================================
+   RECONNECTING INDICATOR (Phase 3)
+   Appears at top-center only after 2+ consecutive poll failures.
+   ============================================================ */
+.reconnecting-indicator {
+    position: fixed;
+    top: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.55rem 1.15rem;
+    background: #f59e0b;
+    color: #ffffff;
+    border-radius: 100px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    box-shadow:
+        0 6px 20px -4px rgba(245, 158, 11, 0.45),
+        0 2px 6px rgba(0, 0, 0, 0.08);
+    z-index: 950;
+    pointer-events: none;
+    animation: reconnectFadeInAdmin 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reconnecting-indicator i {
+    font-size: 0.95rem;
+}
+@keyframes reconnectFadeInAdmin {
+    from { opacity: 0; transform: translate(-50%, -12px); }
+    to   { opacity: 1; transform: translate(-50%, 0); }
+}
+@media (max-width: 768px) {
+    .reconnecting-indicator {
+        top: auto;
+        bottom: 1rem;
+        font-size: 0.8rem;
+        padding: 0.45rem 0.9rem;
+    }
+}
