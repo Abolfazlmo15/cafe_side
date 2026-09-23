@@ -215,3 +215,65 @@ function apiBuildOrdersData($pdo, $tableNumber, $deviceToken) {
         'active_items'      => $itemDetails,
     ];
 }
+
+/**
+ * Build the full orders list for a given date.
+ * Returns structured order objects — no HTML.
+ */
+function apiBuildOrdersListData($pdo, $date) {
+    $stmt = $pdo->prepare("
+        SELECT * FROM orders
+        WHERE DATE(created_at) = ?
+        ORDER BY is_ready ASC, created_at DESC
+    ");
+    $stmt->execute([$date]);
+    $orders = $stmt->fetchAll();
+
+    // Preload menu for item name/price resolution.
+    $menuStmt = $pdo->query("SELECT id, name, price FROM menu_items");
+    $menuMap = [];
+    while ($row = $menuStmt->fetch()) {
+        $menuMap[(int)$row['id']] = [
+            'name'  => $row['name'],
+            'price' => (int)$row['price'],
+        ];
+    }
+
+    $out = [];
+    foreach ($orders as $order) {
+        $items = json_decode($order['items'], true) ?: [];
+        $itemList   = [];
+        $totalQty   = 0;
+        $totalPrice = 0;
+
+        foreach ($items as $id => $qty) {
+            $idInt  = (int)$id;
+            $qtyInt = (int)$qty;
+            $name   = $menuMap[$idInt]['name']  ?? "Unknown (#$idInt)";
+            $price  = $menuMap[$idInt]['price'] ?? 0;
+            $subtotal = $price * $qtyInt;
+            $totalQty   += $qtyInt;
+            $totalPrice += $subtotal;
+            $itemList[] = [
+                'id'       => $idInt,
+                'name'     => $name,
+                'qty'      => $qtyInt,
+                'price'    => $price,
+                'subtotal' => $subtotal,
+            ];
+        }
+
+        $out[] = [
+            'id'          => (int)$order['id'],
+            'table'       => (int)$order['table_number'],
+            'is_ready'    => (int)$order['is_ready'] === 1,
+            'note'        => $order['customer_note'] ?? '',
+            'created_at'  => $order['created_at'],
+            'time'        => date('H:i:s', strtotime($order['created_at'])),
+            'total_qty'   => $totalQty,
+            'total_price' => $totalPrice,
+            'items'       => $itemList,
+        ];
+    }
+    return $out;
+}

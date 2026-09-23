@@ -9,7 +9,9 @@
 //   0  = production only
 //  -1  = try production, fall back to local if unreachable
 
-ini_set('session.gc_probability', '0');
+if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.gc_probability', '0');
+}
 
 // ───── Load .env ─────
 require_once __DIR__ . '/EnvLoader.php';

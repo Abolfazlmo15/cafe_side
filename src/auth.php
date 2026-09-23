@@ -1,8 +1,7 @@
 <?php
 require_once __DIR__ . '/urls.php';
-ini_set('session.gc_probability', '0');
-
 if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.gc_probability', '0');
     session_start();
 }
 
