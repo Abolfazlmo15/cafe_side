@@ -2,42 +2,44 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title><?= htmlspecialchars($this->title) ?></title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
-        /* ----- RESET & BASE ----- */
         * { margin:0; padding:0; box-sizing:border-box; }
+        html, body { height: 100%; }
         body {
             font-family: system-ui, -apple-system, sans-serif;
             background: #f8f5f2;
-            min-height: 100vh;
+            overflow-x: hidden;
         }
-
         .admin-wrapper {
             display: flex;
             min-height: 100vh;
+            min-height: 100dvh;
         }
 
-        /* ----- SIDEBAR ----- */
         .sidebar {
             width: 260px;
             background: #2d1b0e;
-            color: white;
+            color: #fff;
             padding: 2rem 1.5rem;
             height: 100vh;
+            height: 100dvh;
             overflow-y: auto;
+            overscroll-behavior: contain;
             flex-shrink: 0;
-            transition: margin-left 0.3s ease;
-            margin-left: 0;
-            z-index: 1000;
             position: sticky;
             top: 0;
+            margin-left: 0;
+            transition: margin-left 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+            z-index: 100;
             border-right: 1px solid #4d3628;
         }
-        .sidebar.closed {
+        body.nav-collapsed .sidebar {
             margin-left: -260px;
         }
+
         .sidebar .logo {
             font-size: 1.5rem;
             font-weight: 700;
@@ -45,7 +47,7 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            color: white;
+            color: #fff;
         }
         .sidebar .logo img {
             width: 36px;
@@ -54,12 +56,8 @@
             object-fit: cover;
             display: block;
         }
-        .sidebar nav ul {
-            list-style: none;
-        }
-        .sidebar nav ul li {
-            margin-bottom: 0.5rem;
-        }
+        .sidebar nav ul { list-style: none; }
+        .sidebar nav ul li { margin-bottom: 0.5rem; }
         .sidebar nav ul li a {
             color: #cbd5e1;
             text-decoration: none;
@@ -70,30 +68,22 @@
             border-radius: 0.5rem;
             transition: 0.2s;
         }
-        .sidebar nav ul li a:hover {
-            background: #4d3628;
-            color: white;
-        }
-        .sidebar nav ul li a.active {
-            background: #6f4e37;
-            color: white;
-        }
-        .sidebar nav ul li a i {
-            width: 1.4rem;
-        }
+        .sidebar nav ul li a:hover { background: #4d3628; color: #fff; }
+        .sidebar nav ul li a.active { background: #6f4e37; color: #fff; }
+        .sidebar nav ul li a i { width: 1.4rem; }
 
-        /* ----- MAIN CONTENT ----- */
         .main-content {
             flex: 1;
             display: flex;
             flex-direction: column;
             background: #f8f5f2;
+            min-width: 0;
             min-height: 100vh;
+            min-height: 100dvh;
         }
 
-        /* ----- ADMIN HEADER ----- */
         .admin-header {
-            background: white;
+            background: #fff;
             padding: 0.6rem 2rem;
             border-bottom: 1px solid #f0e4db;
             display: flex;
@@ -106,17 +96,26 @@
             align-items: center;
             gap: 0.8rem;
         }
-        .admin-header .left .toggle-btn {
+        .toggle-btn {
             background: none;
             border: none;
             font-size: 1.6rem;
             color: #2d1b0e;
             cursor: pointer;
-            padding: 0.2rem 0.4rem;
+            padding: 0.4rem 0.6rem;
             display: flex;
             align-items: center;
+            border-radius: 0.5rem;
+            transition: background 0.15s, transform 0.12s;
+            font-family: inherit;
+            line-height: 1;
+            pointer-events: auto;
         }
-        .admin-header .left .page-title {
+        .toggle-btn:hover { background: #f3e8e0; }
+        .toggle-btn:active { transform: scale(0.94); }
+        .toggle-btn i { pointer-events: none; }
+
+        .page-title {
             font-size: 1.4rem;
             font-weight: 600;
             color: #2d1b0e;
@@ -124,13 +123,11 @@
             align-items: center;
             gap: 0.4rem;
         }
-        .admin-header .left .page-title img {
+        .page-title img {
             width: 32px;
             height: 32px;
             border-radius: 50%;
             object-fit: cover;
-            display: inline-block;
-            vertical-align: middle;
             margin-right: 0.4rem;
         }
 
@@ -145,7 +142,6 @@
             margin-top: 0.2rem;
         }
 
-        /* ----- PAGE CONTAINER ----- */
         .page-container {
             flex: 1;
             padding: 1.5rem 2rem;
@@ -154,14 +150,13 @@
         .page-container .container {
             max-width: 1400px;
             margin: 0 auto;
-            background: white;
+            background: #fff;
             padding: 1.5rem 2rem;
             border-radius: 1.5rem;
             border: 1px solid #f0e4db;
             box-shadow: 0 4px 12px rgba(0,0,0,0.04);
         }
 
-        /* ----- FOOTER ----- */
         .admin-footer {
             background: #f8f5f2;
             border-top: 1px solid #f0e4db;
@@ -186,60 +181,70 @@
             margin-right: 0.4rem;
         }
 
-        /* ----- SIDEBAR OVERLAY (mobile) ----- */
         .sidebar-overlay {
-            display: none;
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.3);
-            z-index: 999;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: 99;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.22s ease, visibility 0.22s ease;
+            pointer-events: none;
         }
-        .sidebar-overlay.active {
-            display: block;
+        body.nav-open .sidebar-overlay {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
         }
 
-        /* ----- RESPONSIVE (mobile) ----- */
-        @media (max-width: 768px) {
+        @media (max-width: 1024px) {
             .sidebar {
                 position: fixed;
                 top: 0;
+                bottom: 0;
                 left: 0;
-                height: 100vh;
-                margin-left: -260px;
-                box-shadow: 2px 0 12px rgba(0,0,0,0.15);
+                height: auto;
+                max-height: 100dvh;
+                width: 260px;
+                margin-left: -280px;
+                z-index: 100;
+                box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
+                padding-top: max(2rem, calc(2rem + env(safe-area-inset-top)));
+                padding-bottom: max(2rem, calc(2rem + env(safe-area-inset-bottom)));
+                transition: margin-left 0.3s cubic-bezier(0.22, 1, 0.36, 1);
             }
-            .sidebar.open {
+            body.nav-collapsed .sidebar {
+                margin-left: -280px;
+            }
+            body.nav-open .sidebar {
                 margin-left: 0;
             }
-            .admin-header {
-                padding: 0.6rem 1rem;
-            }
-            .admin-header .left .page-title {
-                font-size: 1.2rem;
-            }
-            .page-container {
-                padding: 1rem;
-            }
-            .page-container .container {
-                padding: 1rem;
-            }
+
+            .admin-header { padding: 0.6rem 1rem; }
+            .page-title { font-size: 1.15rem; }
+            .page-title img { width: 28px; height: 28px; }
+
+            .page-container { padding: 1rem; }
+            .page-container .container { padding: 1rem; }
+
             .admin-footer {
                 padding: 0.6rem 1rem;
                 flex-direction: column;
                 text-align: center;
             }
         }
+
+        @media (max-width: 480px) {
+            .page-title { font-size: 1rem; }
+            .page-title img { width: 24px; height: 24px; }
+            .toggle-btn { font-size: 1.4rem; }
+        }
     </style>
 </head>
 <body>
     <div class="admin-wrapper">
-        <!-- ===== SIDEBAR (hardcoded) ===== -->
-        <?php
-        $active = $this->activePage ?? 'orders';
-        ?>
+        <?php $active = $this->activePage ?? 'orders'; ?>
+
         <aside class="sidebar" id="adminSidebar">
             <div class="logo">
                 <img src="../../assets/images/icons/side_coffee.png" alt="<?= SITE_NAME ?>">
@@ -258,13 +263,32 @@
             </nav>
         </aside>
 
-        <div class="sidebar-overlay" id="sidebarOverlay"></div>
+        <!--
+            OVERLAY — inline onclick.
+            This element covers everything outside the sidebar when it's open.
+            Any click on it closes the sidebar. No script block needed.
+        -->
+        <div class="sidebar-overlay"
+             id="sidebarOverlay"
+             onclick="document.body.classList.remove('nav-open');"></div>
 
         <div class="main-content">
-            <!-- ===== HEADER (hardcoded) ===== -->
             <header class="admin-header">
                 <div class="left">
-                    <button class="toggle-btn" id="sidebarToggle" onclick="toggleSidebar()">
+                    <button class="toggle-btn"
+                            type="button"
+                            id="sidebarToggleBtn"
+                            aria-label="Toggle sidebar"
+                            onclick="
+                                var w = window.innerWidth;
+                                var b = document.body;
+                                if (w <= 1024) {
+                                    b.classList.toggle('nav-open');
+                                } else {
+                                    b.classList.toggle('nav-collapsed');
+                                    try { localStorage.setItem('admin_sidebar_collapsed', b.classList.contains('nav-collapsed') ? 'true' : 'false'); } catch(e) {}
+                                }
+                            ">
                         <i class="fas fa-bars"></i>
                     </button>
                     <div class="page-title">
@@ -285,7 +309,6 @@
                 </div>
             </div>
 
-            <!-- ===== FOOTER (hardcoded) ===== -->
             <footer class="admin-footer">
                 <span>
                     <img src="../../assets/images/icons/side_coffee.png" alt="<?= SITE_NAME ?>">
@@ -297,80 +320,32 @@
     </div>
 
     <script>
-        // ----- SIDEBAR TOGGLE -----
-        const sidebar = document.getElementById('adminSidebar');
-        const overlay = document.getElementById('sidebarOverlay');
-
-        function toggleSidebar() {
-            if (window.innerWidth <= 768) {
-                sidebar.classList.toggle('open');
-                overlay.classList.toggle('active');
-                const isOpen = sidebar.classList.contains('open');
-                localStorage.setItem('sidebarOpen', isOpen ? 'true' : 'false');
-            } else {
-                sidebar.classList.toggle('closed');
-                overlay.classList.remove('active');
-                const isClosed = sidebar.classList.contains('closed');
-                localStorage.setItem('sidebarClosed', isClosed ? 'true' : 'false');
-            }
-        }
-
-        (function() {
-            if (window.innerWidth <= 768) {
-                const savedOpen = localStorage.getItem('sidebarOpen');
-                if (savedOpen === 'true') {
-                    sidebar.classList.add('open');
-                    overlay.classList.add('active');
-                } else {
-                    sidebar.classList.remove('open');
-                    overlay.classList.remove('active');
-                }
-            } else {
-                const savedClosed = localStorage.getItem('sidebarClosed');
-                if (savedClosed === 'true') {
-                    sidebar.classList.add('closed');
-                } else {
-                    sidebar.classList.remove('closed');
-                }
-                overlay.classList.remove('active');
-            }
-        })();
-
-        overlay.addEventListener('click', function() {
-            if (window.innerWidth <= 768 && sidebar.classList.contains('open')) {
-                toggleSidebar();
-            }
-        });
-
-        document.querySelectorAll('.sidebar nav ul li a').forEach(link => {
-            link.addEventListener('click', function() {
-                if (window.innerWidth <= 768 && sidebar.classList.contains('open')) {
-                    toggleSidebar();
+    // Escape closes the mobile sidebar. Nav-link close. Restore desktop state.
+    (function () {
+        try {
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && window.innerWidth <= 1024) {
+                    document.body.classList.remove('nav-open');
                 }
             });
-        });
 
-        window.addEventListener('resize', function() {
-            if (window.innerWidth > 768) {
-                sidebar.classList.remove('open');
-                overlay.classList.remove('active');
-                const savedClosed = localStorage.getItem('sidebarClosed');
-                if (savedClosed === 'true') {
-                    sidebar.classList.add('closed');
-                } else {
-                    sidebar.classList.remove('closed');
-                }
-            } else {
-                const savedOpen = localStorage.getItem('sidebarOpen');
-                if (savedOpen === 'true') {
-                    sidebar.classList.add('open');
-                    overlay.classList.add('active');
-                } else {
-                    sidebar.classList.remove('open');
-                    overlay.classList.remove('active');
-                }
+            var links = document.querySelectorAll('.sidebar nav a');
+            for (var i = 0; i < links.length; i++) {
+                links[i].addEventListener('click', function () {
+                    if (window.innerWidth <= 1024) {
+                        setTimeout(function () {
+                            document.body.classList.remove('nav-open');
+                        }, 0);
+                    }
+                });
             }
-        });
-    </script>
-</body>
-</html>
+
+            if (window.innerWidth > 1024) {
+                var wasCollapsed = localStorage.getItem('admin_sidebar_collapsed') === 'true';
+                if (wasCollapsed) document.body.classList.add('nav-collapsed');
+            }
+        } catch (err) {
+            console.warn('[sidebar-helper] init failed:', err);
+        }
+    })();
+    

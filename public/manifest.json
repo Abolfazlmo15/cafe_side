@@ -1,0 +1,28 @@
+{
+  "name": "Cafe Side — Menu & Ordering",
+  "short_name": "Cafe Side",
+  "description": "Browse the menu and place your order directly from your table.",
+  "start_url": "../public/client/menu.php",
+  "scope": "../public/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8f5f2",
+  "theme_color": "#6f4e37",
+  "lang": "en",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "../assets/images/icons/side_coffee.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "../assets/images/icons/side_coffee.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["food", "shopping"]
+}
