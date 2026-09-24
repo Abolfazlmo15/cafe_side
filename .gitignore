@@ -19,6 +19,8 @@ package-lock.json
 *.sql
 *.sql.gz
 
+_*.php
+
 # Real config (never commit real secrets)
 # src/config.php
 

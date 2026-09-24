@@ -255,6 +255,7 @@
                     <li><a href="<?= URL_ADMIN_ORDERS ?>" class="<?= $active === 'orders' ? 'active' : '' ?>"><i class="fas fa-clipboard-list"></i> Orders</a></li>
                     <li><a href="<?= URL_ADMIN_QR ?>" class="<?= $active === 'qr' ? 'active' : '' ?>"><i class="fas fa-qrcode"></i> QR Codes</a></li>
                     <li><a href="<?= URL_ADMIN_ITEMS ?>" class="<?= $active === 'items' ? 'active' : '' ?>"><i class="fas fa-utensils"></i> Items</a></li>
+                    <li><a href="<?= URL_ADMIN_ANALYTICS ?>" class="<?= $active === 'analytics' ? 'active' : '' ?>"><i class="fas fa-chart-line"></i> Analytics</a></li>
                     <li><a href="<?= URL_ADMIN_SETTINGS ?>" class="<?= $active === 'settings' ? 'active' : '' ?>"><i class="fas fa-cog"></i> Settings</a></li>
                     <li style="margin-top:1.5rem; border-top:1px solid #4d3628; padding-top:0.8rem;">
                         <a href="<?= URL_LOGOUT ?>"><i class="fas fa-sign-out-alt"></i> Logout</a>

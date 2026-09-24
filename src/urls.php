@@ -13,6 +13,7 @@ define('URL_ADMIN_ITEMS', PUBLIC_URL . '/admin/items.php');
 define('URL_ADMIN_SETTINGS', PUBLIC_URL . '/admin/settings.php');
 define('URL_LOGIN', PUBLIC_URL . '/auth/login.php');
 define('URL_LOGOUT', PUBLIC_URL . '/auth/logout.php');
+define('URL_ADMIN_ANALYTICS', PUBLIC_URL . '/admin/analytics.php');
 
 function getTableQRUrl($tableNumber) {
     return URL_MENU . '?table=' . (int)$tableNumber;
