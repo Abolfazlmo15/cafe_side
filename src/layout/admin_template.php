@@ -1,3 +1,30 @@
+<?php
+// Migration pending check. Cheap: glob + one small query.
+$__pendingMigrationCount = 0;
+$__pendingMigrationList  = [];
+try {
+    require_once __DIR__ . '/../database.php';
+    $__pdoCheck = getDbConnection();
+    $__versionsDir = __DIR__ . '/../migrations/versions/';
+    $__files = glob($__versionsDir . '*.php');
+    if ($__files) {
+        $__applied = $__pdoCheck
+            ->query("SELECT migration FROM migrations")
+            ->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($__files as $__f) {
+            $__cn = 'Migration_' . pathinfo($__f, PATHINFO_FILENAME);
+            if (!in_array($__cn, $__applied)) {
+                $__pendingMigrationList[] = $__cn;
+            }
+        }
+    }
+    $__pendingMigrationCount = count($__pendingMigrationList);
+} catch (Throwable $__e) {
+    // Table missing or DB down. Fail quiet.
+    $__pendingMigrationCount = 0;
+}
+?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -274,6 +301,20 @@
              onclick="document.body.classList.remove('nav-open');"></div>
 
         <div class="main-content">
+
+            <?php if ($__pendingMigrationCount > 0): ?>
+                    <div style="background:#fef3c7;border-bottom:1px solid #f59e0b;padding:0.7rem 2rem;color:#78350f;font-size:0.9rem;display:flex;align-items:center;gap:0.8rem;flex-wrap:wrap;">
+                        <i class="fas fa-triangle-exclamation" style="font-size:1.1rem;"></i>
+                        <strong><?= $__pendingMigrationCount ?> migration<?= $__pendingMigrationCount > 1 ? 's' : '' ?> pending.</strong>
+                        <span style="color:#92400e;"><?= htmlspecialchars(implode(', ', $__pendingMigrationList)) ?></span>
+                        <a href="<?= BASE_URL ?>/public/_migrate.php?token=<?= urlencode(env('AI_CRON_TOKEN', '')) ?>"
+                        target="_blank"
+                        style="margin-left:auto;background:#6f4e37;color:#fff;padding:0.35rem 0.9rem;border-radius:0.4rem;text-decoration:none;font-weight:600;font-size:0.85rem;">
+                            Run now
+                        </a>
+                    </div>
+            <?php endif; ?>
+
             <header class="admin-header">
                 <div class="left">
                     <button class="toggle-btn"

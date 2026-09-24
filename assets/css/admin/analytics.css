@@ -1,5 +1,5 @@
 /* ============================================================
-   Admin Analytics — Vue + Chart.js page styles
+   Admin Analytics - Vue + Chart.js page styles
    ============================================================ */
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -53,10 +53,7 @@
     box-shadow: 0 0 0 3px rgba(111, 78, 55, 0.10);
 }
 
-.range-sep {
-    color: #8b6b55;
-    font-size: 0.85rem;
-}
+.range-sep { color: #8b6b55; font-size: 0.85rem; }
 
 .btn-apply {
     background: #6f4e37;
@@ -117,14 +114,12 @@
 .btn-refresh:disabled { opacity: 0.7; cursor: wait; }
 
 /* ============ LAYOUT ============ */
+/* The gap that was missing between Summary and the row that follows it. */
 .report-row-2 {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1.2rem;
     margin-bottom: 1.2rem;
-}
-@media (max-width: 900px) {
-    .report-row-2 { grid-template-columns: 1fr; }
 }
 
 /* ============ REPORT CARD ============ */
@@ -140,18 +135,27 @@
 }
 .report-card-wide { grid-column: 1 / -1; }
 
+.report-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.2rem;
+    padding-bottom: 0.7rem;
+    border-bottom: 1px solid #f0e4db;
+}
+
 .report-title {
     font-size: 0.95rem;
     font-weight: 700;
     color: #2d1b0e;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin-bottom: 1rem;
-    padding-bottom: 0.6rem;
-    border-bottom: 1px solid #f0e4db;
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    margin: 0;
 }
 .report-title i { color: #6f4e37; }
 
@@ -169,7 +173,11 @@
 .empty-state i { color: #b3947e; font-size: 1.2rem; }
 
 /* ============ SUMMARY CARD ============ */
-.summary-card { min-height: 0; }
+/* The fix. Was missing margin-bottom, so it stuck to the row below. */
+.summary-card {
+    min-height: 0;
+    margin-bottom: 1.2rem;
+}
 .summary-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -204,13 +212,18 @@
 }
 
 /* ============ CHARTS ============ */
+/* Explicit width: 100% so Chart.js always has a resolvable size */
 .chart-wrapper {
     position: relative;
     flex: 1;
+    width: 100%;
     min-height: 260px;
 }
 .chart-wrapper-tall { min-height: 340px; }
-.chart-wrapper canvas { display: block; }
+.chart-wrapper canvas {
+    display: block;
+    max-width: 100%;
+}
 
 /* ============ TABLE ============ */
 .table-wrap {
@@ -315,18 +328,587 @@
         rgba(111,78,55,0.83));
 }
 
-/* ============ RESPONSIVE ============ */
-@media (max-width: 640px) {
-    .analytics-toolbar { padding: 0.8rem 0.9rem; }
+/* ============================================================
+   AI EXPLAIN BUTTON + SUMMARY CARD (Phase 4)
+   ============================================================ */
+.btn-explain {
+    background: linear-gradient(135deg, #6f4e37, #8a6248);
+    color: #fff;
+    border: none;
+    padding: 0.4rem 0.9rem;
+    border-radius: 100px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    transition: 0.15s;
+    letter-spacing: 0.02em;
+    box-shadow: 0 2px 8px rgba(111, 78, 55, 0.20);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.btn-explain:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(111, 78, 55, 0.35);
+    background: linear-gradient(135deg, #5a3f2e, #6f4e37);
+}
+.btn-explain:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+.btn-explain:disabled { opacity: 0.75; cursor: wait; }
+.btn-explain i { font-size: 0.82rem; }
+
+.ai-summary {
+    margin-top: 1rem;
+    border-radius: 0.75rem;
+    padding: 0.9rem 1.1rem;
+    font-size: 0.92rem;
+    line-height: 1.6;
+    animation: aiSummaryIn 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes aiSummaryIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.ai-summary.state-loading {
+    background: linear-gradient(135deg, #f3e8e0, #fcf8f5);
+    border: 1px solid #e8d9cf;
+    color: #8b6b55;
+}
+.ai-summary.state-error {
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+    color: #991b1b;
+}
+.ai-summary.state-ready {
+    background: linear-gradient(135deg, #fcf8f5, #f3e8e0);
+    border-left: 4px solid #6f4e37;
+    border-top: 1px solid #f0e4db;
+    border-right: 1px solid #f0e4db;
+    border-bottom: 1px solid #f0e4db;
+}
+.ai-summary-loading {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-style: italic;
+}
+.ai-summary-loading i { color: #6f4e37; }
+.ai-summary-error-line {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+.ai-summary-error-line i { font-size: 1rem; }
+.ai-summary-retry {
+    margin-left: auto;
+    background: #fff;
+    color: #991b1b;
+    border: 1.5px solid #fca5a5;
+    padding: 0.25rem 0.7rem;
+    border-radius: 100px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    transition: 0.15s;
+}
+.ai-summary-retry:hover { background: #fee2e2; border-color: #dc2626; }
+
+.ai-summary-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.5rem;
+    flex-wrap: wrap;
+}
+.ai-summary-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: #6f4e37;
+    color: #fff;
+    padding: 0.15rem 0.6rem;
+    border-radius: 100px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+}
+.ai-summary-badge i { font-size: 0.7rem; }
+.ai-summary-provider {
+    font-size: 0.72rem;
+    color: #8b6b55;
+    font-weight: 600;
+    font-style: italic;
+}
+.ai-summary-regen {
+    margin-left: auto;
+    background: transparent;
+    color: #8b6b55;
+    border: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.78rem;
+    transition: 0.15s;
+}
+.ai-summary-regen:hover:not(:disabled) {
+    background: #e8d9cf;
+    color: #6f4e37;
+    transform: rotate(90deg);
+}
+.ai-summary-regen:disabled { opacity: 0.4; cursor: wait; }
+.ai-summary-text {
+    margin: 0;
+    color: #3d2a1a;
+    font-size: 0.92rem;
+    line-height: 1.65;
+}
+
+/* ============================================================
+   PHASE 3.2 - new report components
+   ============================================================ */
+
+/* --- Trend direction pill (fading / rising) --- */
+.trend-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.12rem 0.55rem;
+    border-radius: 100px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.trend-pill.down { background: #fee2e2; color: #991b1b; }
+.trend-pill.up   { background: #d1fae5; color: #065f46; }
+.trend-pill.flat { background: #f1f5f9; color: #64748b; }
+.trend-pill i { font-size: 0.68rem; }
+
+/* --- Combo pair row: name x name --- */
+.combo-pair {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 600;
+    color: #2d1b0e;
+}
+.combo-pair .combo-plus {
+    color: #b3947e;
+    font-size: 0.85rem;
+    font-weight: 800;
+}
+
+/* --- Price tier grid (three cards) --- */
+.tier-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    flex: 1;
+}
+.tier-card {
+    padding: 1rem 1.1rem 1.1rem;
+    background: linear-gradient(135deg, #fcf8f5, #f3e8e0);
+    border: 1px solid #f0e4db;
+    border-radius: 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.tier-header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 700;
+    color: #2d1b0e;
+    font-size: 0.92rem;
+}
+.tier-header i { color: #6f4e37; font-size: 0.85rem; }
+.tier-range {
+    font-size: 0.72rem;
+    color: #8b6b55;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.tier-stat {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding-top: 0.4rem;
+    border-top: 1px dashed #e8d9cf;
+}
+.tier-stat .tier-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #8b6b55;
+    font-weight: 700;
+}
+.tier-stat .tier-value {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #2d1b0e;
+    font-variant-numeric: tabular-nums;
+}
+.tier-stat .tier-value small {
+    font-size: 0.72rem;
+    color: #8b6b55;
+    font-weight: 600;
+    margin-left: 0.15rem;
+}
+
+/* ============================================================
+   RESPONSIVE - organized by breakpoint
+   ============================================================ */
+
+/* ---- 1024px: tablet landscape, still lots of room ---- */
+@media (max-width: 1024px) {
+    .page-container { padding: 1rem; }
+}
+
+/* ---- 900px: two-column grid collapses, toolbar stacks ---- */
+@media (max-width: 900px) {
+    .report-row-2 {
+        grid-template-columns: 1fr;
+    }
+
+    .analytics-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.7rem;
+    }
     .toolbar-left,
     .toolbar-quick,
     .toolbar-right {
         width: 100%;
         justify-content: flex-start;
         margin: 0;
+        flex-wrap: wrap;
     }
-    .toolbar-right { border-top: 1px solid #f0e4db; padding-top: 0.6rem; }
-    .date-input { flex: 1; min-width: 0; }
-    .stat-value { font-size: 1.25rem; }
-    .report-card { padding: 1rem 1.1rem 1.2rem; }
+    .toolbar-right {
+        border-top: 1px solid #f0e4db;
+        padding-top: 0.7rem;
+        margin-top: 0.2rem;
+    }
+    .toolbar-right .btn-refresh {
+        width: 100%;
+        justify-content: center;
+    }
+    .toolbar-left .date-input { flex: 1 1 0; min-width: 0; }
+    .toolbar-left .btn-apply { flex: 0 0 auto; }
 }
+
+/* ---- 640px: phone. Tighter padding, bigger touch targets ---- */
+@media (max-width: 640px) {
+    .analytics-toolbar { padding: 0.85rem 0.95rem; }
+    .toolbar-label { font-size: 0.82rem; }
+    .quick-btn { padding: 0.4rem 0.8rem; font-size: 0.78rem; }
+    .btn-apply { padding: 0.45rem 0.85rem; font-size: 0.82rem; }
+    .date-input { padding: 0.45rem 0.55rem; font-size: 0.82rem; }
+
+    .report-card {
+        padding: 1rem 1.1rem 1.15rem;
+        border-radius: 1rem;
+    }
+    .report-title-row {
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.6rem;
+    }
+    .report-title { font-size: 0.85rem; }
+
+    /* Explain button on its own line for thumb reach */
+    .report-title-row .btn-explain {
+        align-self: flex-start;
+        font-size: 0.74rem;
+        padding: 0.35rem 0.8rem;
+    }
+
+    .summary-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.7rem;
+    }
+    .stat { padding: 0.75rem 0.9rem; }
+    .stat-label { font-size: 0.68rem; }
+    .stat-value { font-size: 1.15rem; }
+    .stat-unit { font-size: 0.78rem; }
+
+    .chart-wrapper { min-height: 230px; }
+    .chart-wrapper-tall { min-height: 280px; }
+
+    .report-table thead th,
+    .report-table tbody td {
+        padding: 0.5rem 0.6rem;
+        font-size: 0.85rem;
+    }
+
+    .ai-summary { padding: 0.8rem 0.9rem; font-size: 0.88rem; }
+    .ai-summary-text { font-size: 0.88rem; }
+    .ai-summary-header { gap: 0.4rem; }
+
+    .tier-grid {
+        grid-template-columns: 1fr;
+        gap: 0.7rem;
+    }
+    .tier-card { padding: 0.9rem 1rem; }
+
+    .heatmap-grid { min-width: 560px; }
+}
+
+/* ---- 420px: very narrow. Final tightening ---- */
+@media (max-width: 420px) {
+    .analytics-toolbar { padding: 0.75rem 0.8rem; }
+    .toolbar-label { display: none; }
+    .summary-grid { grid-template-columns: 1fr; }
+    .stat-value { font-size: 1.05rem; }
+    .report-card { padding: 0.9rem 0.95rem 1rem; }
+    .report-title { font-size: 0.8rem; letter-spacing: 0.3px; }
+    .heatmap-grid { min-width: 520px; }
+}
+/* ============================================================
+   HORIZONTAL SCROLL - the correct implementation
+   ------------------------------------------------------------
+   Two CSS defaults prevent overflow from ever happening:
+     1. Grid tracks default to minmax(auto, 1fr). The "auto"
+        minimum refuses to shrink below content size.
+     2. Flex items default to min-width: auto. Same problem.
+   We disable both at every level so overflow-x: auto can
+   actually do its job.
+   ============================================================ */
+
+/* ---- Level 1: grid tracks must be allowed to shrink ---- */
+.report-row-2 {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+/* ---- Level 2: grid item (report card) must shrink ---- */
+.report-row-2 > .report-card {
+    min-width: 0;
+}
+
+/* ---- Level 3: flex column inside the card must shrink ---- */
+.report-card {
+    min-width: 0;
+}
+
+/* ============================================================
+   Least-Selling Items and Top Items: table horizontal scroll
+   ============================================================ */
+
+.table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    min-width: 0;
+    max-width: 100%;
+    padding-bottom: 0.65rem;
+    scrollbar-width: thin;
+    scrollbar-color: #b3947e #f3e8e0;
+}
+
+.report-table {
+    width: 100%;
+    min-width: 480px;   /* forces the table to overflow narrow wraps */
+}
+
+/* Webkit scrollbar (Chrome, Edge, Safari) */
+.table-wrap::-webkit-scrollbar {
+    height: 10px;
+}
+.table-wrap::-webkit-scrollbar-track {
+    background: #f3e8e0;
+    border-radius: 5px;
+    margin: 0 0.5rem;
+}
+.table-wrap::-webkit-scrollbar-thumb {
+    background: #b3947e;
+    border-radius: 5px;
+    border: 2px solid #f3e8e0;
+}
+.table-wrap::-webkit-scrollbar-thumb:hover {
+    background: #6f4e37;
+}
+
+/* ============================================================
+   Orders by Hour: heatmap horizontal scroll
+   ============================================================ */
+
+.heatmap-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    min-width: 0;
+    max-width: 100%;
+    padding-bottom: 0.65rem;
+    scrollbar-width: thin;
+    scrollbar-color: #b3947e #f3e8e0;
+
+    /* base stylesheet had display: flex; flex-direction: column;
+       that made children stretch. Reset to block so they can be
+       wider than the wrap without being squished. */
+    display: block;
+}
+
+.heatmap-grid {
+    /* Fixed-width columns: total = 42 + 24*26 + 24*2 = ~718px.
+       Combined with width: max-content this is the grid's
+       irreducible size. When the wrap is narrower, scroll. */
+    grid-template-columns: 42px repeat(24, 26px);
+    gap: 2px;
+    width: max-content;
+    min-width: 100%;  /* fill the visible width if the wrap is wide */
+    margin: 0 auto;   /* center when it fits */
+}
+
+.heatmap-legend {
+    /* Sits below the grid, always at least as wide as the visible
+       wrap so the High label lands at the right edge of the
+       current viewport. Doesn't scroll with the grid — it acts
+       as a stationary scale indicator. */
+    width: max-content;
+    min-width: 100%;
+}
+
+.heatmap-wrap::-webkit-scrollbar {
+    height: 10px;
+}
+.heatmap-wrap::-webkit-scrollbar-track {
+    background: #f3e8e0;
+    border-radius: 5px;
+    margin: 0 0.5rem;
+}
+.heatmap-wrap::-webkit-scrollbar-thumb {
+    background: #b3947e;
+    border-radius: 5px;
+    border: 2px solid #f3e8e0;
+}
+.heatmap-wrap::-webkit-scrollbar-thumb:hover {
+    background: #6f4e37;
+}
+
+/* ============================================================
+   Small-phone tightening: slightly narrower columns so more
+   hours are visible before the user needs to scroll.
+   ============================================================ */
+@media (max-width: 480px) {
+    .heatmap-grid {
+        grid-template-columns: 38px repeat(24, 22px);
+    }
+    .heatmap-day-label {
+        font-size: 0.68rem;
+        padding-right: 5px;
+    }
+    .heatmap-hour-label {
+        font-size: 0.58rem;
+    }
+    .report-table {
+        min-width: 420px;
+    }
+}
+/* ============================================================
+   TABLE COLUMN PROPORTIONS
+   Fixes the "ITEM column hogs everything" problem.
+   table-layout: fixed means the browser honors our column widths
+   instead of sizing by content.
+   ============================================================ */
+
+.report-table {
+    table-layout: fixed;
+    width: 100%;
+    min-width: 340px;   /* fits 3 columns on a narrow phone */
+}
+
+/* Column 1: Item name. Narrower now. Wrap if the name is long. */
+.report-table thead th:nth-child(1),
+.report-table tbody td:nth-child(1) {
+    width: 48%;
+    white-space: normal;    /* override the base nowrap so long names wrap */
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
+/* Column 2: numeric. Sold / Before / After */
+.report-table thead th:nth-child(2),
+.report-table tbody td:nth-child(2) {
+    width: 18%;
+}
+
+/* Column 3: numeric. Revenue / Change */
+.report-table thead th:nth-child(3),
+.report-table tbody td:nth-child(3) {
+    width: 34%;
+}
+
+/* Long numbers should not wrap - they look terrible when they do */
+.report-table tbody td.num {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ============================================================
+   MOBILE GRID TRACKS
+   The base sheet uses `grid-template-columns: 1fr` inside the
+   900px media query. A `1fr` track has an implicit minimum of
+   `auto`, which refuses to shrink below content. So the card
+   stays as wide as the table's minimum width, and the "empty
+   space" you see is actually the card being wider than the
+   viewport expects.
+   Override with minmax(0, 1fr) so the track can shrink and let
+   the .table-wrap scroll instead of stretching.
+   ============================================================ */
+
+@media (max-width: 900px) {
+    .report-row-2 {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .report-row-2 > .report-card {
+        min-width: 0;
+    }
+}
+
+/* Also enforce on desktop for the two-column grid */
+.report-row-2 {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+/* The heatmap card is a wide grid item too. Same treatment. */
+.report-card-wide {
+    grid-column: 1 / -1;
+    min-width: 0;
+}
+
+/* ============================================================
+   SMALL PHONE TWEAKS
+   Reduce table min-width further and tighten columns so all
+   three are visible without scroll on most phones.
+   ============================================================ */
+
+@media (max-width: 480px) {
+    .report-table {
+        min-width: 300px;
+    }
+    .report-table thead th:nth-child(1),
+    .report-table tbody td:nth-child(1) {
+        width: 45%;
+    }
+    .report-table thead th:nth-child(2),
+    .report-table tbody td:nth-child(2) {
+        width: 20%;
+    }
+    .report-table thead th:nth-child(3),
+    .report-table tbody td:nth-child(3) {
+        width: 35%;
+    }
+    .report-table thead th,
+    .report-table tbody td {
+        padding: 0.45rem 0.5rem;
+        font-size: 0.82rem;
+    }
+}
+

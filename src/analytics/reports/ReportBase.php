@@ -29,19 +29,29 @@ abstract class ReportBase
     abstract public function run(PDO $pdo, string $dateStart, string $dateEnd): array;
 
     /**
-     * Load the menu once — id => [name, price]. Reports use this to
-     * resolve item names and prices from the JSON payload stored in
-     * orders.items.
+     * Load every item name+price the reports might need to resolve.
+     * Reads from both menu_items (active) and menu_items_deleted
+     * (archived). Historical orders referencing deleted items now
+     * resolve to the real name instead of "Unknown (#id)".
      */
     protected function loadMenuMap(PDO $pdo): array
     {
-        $stmt = $pdo->query("SELECT id, name, price FROM menu_items");
+        $stmt = $pdo->query("
+            SELECT id, name, price FROM menu_items
+            UNION ALL
+            SELECT id, name, price FROM menu_items_deleted
+        ");
         $map = [];
         while ($row = $stmt->fetch()) {
-            $map[(int) $row['id']] = [
-                'name'  => (string) $row['name'],
-                'price' => (int) $row['price'],
-            ];
+            $id = (int) $row['id'];
+            // If the same id somehow exists in both (shouldn't, but
+            // defensive), the active row wins.
+            if (!isset($map[$id])) {
+                $map[$id] = [
+                    'name'  => (string) $row['name'],
+                    'price' => (int) $row['price'],
+                ];
+            }
         }
         return $map;
     }

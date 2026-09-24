@@ -2,6 +2,7 @@
 // public/admin/items.php – Menu items management (Vue-powered)
 // ==============================================================
 // Phase 4.1: Vue-rendered list, modal add/edit, no page reloads.
+// Phase 3.2: soft-delete preserves names for historical reports.
 
 require_once __DIR__ . '/../../src/auth.php';
 require_once __DIR__ . '/../../src/database.php';
@@ -48,6 +49,7 @@ function uploadItemImage($file, $itemName) {
 if (isset($_GET['api'])) {
     $api = $_GET['api'];
 
+    // ---- GET: items list / poll ----------------------------------
     if ($api === 'items' || $api === 'poll') {
         $clientVersion = isset($_GET['version']) ? (int)$_GET['version'] : 0;
         $serverVersion = apiGetVersion($pdo);
@@ -65,6 +67,7 @@ if (isset($_GET['api'])) {
         ]);
     }
 
+    // ---- POST: item_save -----------------------------------------
     if ($api === 'item_save' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $id          = (int)($_POST['id'] ?? 0);
         $name        = trim($_POST['name'] ?? '');
@@ -144,20 +147,55 @@ if (isset($_GET['api'])) {
         }
     }
 
+    // ---- POST: item_delete (soft-delete via archive table) -------
     if ($api === 'item_delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int)($_POST['id'] ?? 0);
         if ($id <= 0) apiRespondJson(['error' => 'Invalid item ID'], 400);
 
         try {
-            $stmt = $pdo->prepare("SELECT image_path FROM menu_items WHERE id = ?");
+            // 1. Fetch the full row before deleting.
+            $stmt = $pdo->prepare("SELECT * FROM menu_items WHERE id = ?");
             $stmt->execute([$id]);
             $row = $stmt->fetch();
-            if ($row && $row['image_path']) {
-                $file = __DIR__ . '/../..' . '/' . ltrim($row['image_path'], '/');
-                if (file_exists($file)) @unlink($file);
+
+            if (!$row) {
+                apiRespondJson(['error' => 'Item not found.'], 404);
             }
+
+            // 2. Copy to archive so historical orders keep resolving
+            //    the item name. Image file stays on disk.
+            $stmt = $pdo->prepare("
+                INSERT INTO menu_items_deleted
+                    (id, name, price, category, description, image_path,
+                     sort_order, available, original_created_at, deleted_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                ON DUPLICATE KEY UPDATE
+                    name                = VALUES(name),
+                    price               = VALUES(price),
+                    category            = VALUES(category),
+                    description         = VALUES(description),
+                    image_path          = VALUES(image_path),
+                    sort_order          = VALUES(sort_order),
+                    available           = VALUES(available),
+                    original_created_at = VALUES(original_created_at),
+                    deleted_at          = NOW()
+            ");
+            $stmt->execute([
+                $row['id'],
+                $row['name'],
+                $row['price'],
+                $row['category'],
+                $row['description'] ?? null,
+                $row['image_path'] ?? null,
+                $row['sort_order'] ?? 0,
+                $row['available'] ?? 0,
+                $row['created_at'] ?? null,
+            ]);
+
+            // 3. Remove the active row.
             $stmt = $pdo->prepare("DELETE FROM menu_items WHERE id = ?");
             $stmt->execute([$id]);
+
             apiBumpVersion($pdo);
             apiRespondJson(['success' => true, 'id' => $id]);
         } catch (PDOException $e) {
@@ -166,6 +204,7 @@ if (isset($_GET['api'])) {
         }
     }
 
+    // ---- Unknown API endpoint ------------------------------------
     apiRespondJson(['error' => 'Unknown API endpoint'], 404);
 }
 
@@ -192,7 +231,7 @@ window.__ITEMS_DATA__ = {
 };
 </script>
 
-<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="../../assets/vendor/vue.global.prod.js"></script>
 <script src="../../assets/js/admin/items-vue.js"></script>
 
 <?php
