@@ -1,12 +1,14 @@
 <?php
 // src/analytics/reports/PriceTierShiftReport.php
 // =============================================================
-// Buckets the current menu into three price tiers (cheap, medium,
-// expensive) using tertiles of the item prices. Then, for the
-// first half vs second half of the range, counts how many units
-// were sold from each tier.
+// Splits the menu into three price tiers by tertile. Compares
+// unit sales per tier in the first half vs the second half of
+// the range.
 //
-// Answers: "are customers drifting toward cheaper items?"
+// Returns:
+//   tiers       - one row per tier with before/after qty, rev, share
+//   period_split - ISO date of the midpoint
+//   reason      - null, or 'no_before_data' / 'no_after_data' / 'no_orders_in_range'
 
 require_once __DIR__ . '/ReportBase.php';
 
@@ -19,17 +21,18 @@ class PriceTierShiftReport extends ReportBase
     {
         $menu = $this->loadMenuMap($pdo);
         if (empty($menu)) {
-            return ['tiers' => [], 'total_before' => 0, 'total_after' => 0];
+            return [
+                'tiers' => [], 'total_before' => 0, 'total_after' => 0,
+                'period_split' => $dateStart, 'reason' => 'no_menu',
+            ];
         }
 
-        // Determine tertile cutoffs from all prices.
         $prices = array_column($menu, 'price');
         sort($prices);
         $n = count($prices);
         $p33 = $prices[(int) floor($n * 0.33)];
         $p66 = $prices[(int) floor($n * 0.66)];
 
-        // Assign each item to a tier.
         $tierOf = [];
         foreach ($menu as $id => $row) {
             $p = (int) $row['price'];
@@ -38,7 +41,6 @@ class PriceTierShiftReport extends ReportBase
             else                 $tierOf[$id] = 'expensive';
         }
 
-        // Split range in half.
         $startTs = strtotime($dateStart);
         $endTs   = strtotime($dateEnd);
         $midTs   = (int) ($startTs + (($endTs - $startTs) / 2));
@@ -49,6 +51,11 @@ class PriceTierShiftReport extends ReportBase
         $afterOrders  = ($afterStart <= $dateEnd)
             ? $this->loadOrdersInRange($pdo, $afterStart, $dateEnd)
             : [];
+
+        $reason = null;
+        if (empty($beforeOrders) && empty($afterOrders))      $reason = 'no_orders_in_range';
+        elseif (empty($beforeOrders))                         $reason = 'no_before_data';
+        elseif (empty($afterOrders))                          $reason = 'no_after_data';
 
         $tiers = [
             'cheap'     => ['qty_before' => 0, 'qty_after' => 0, 'rev_before' => 0, 'rev_after' => 0],
@@ -73,7 +80,9 @@ class PriceTierShiftReport extends ReportBase
             }
         }
 
-        $out = [];
+        $totalBefore = $tiers['cheap']['qty_before'] + $tiers['medium']['qty_before'] + $tiers['expensive']['qty_before'];
+        $totalAfter  = $tiers['cheap']['qty_after']  + $tiers['medium']['qty_after']  + $tiers['expensive']['qty_after'];
+
         $labels = ['cheap' => 'Cheap', 'medium' => 'Medium', 'expensive' => 'Expensive'];
         $ranges = [
             'cheap'     => 'up to ' . number_format($p33) . ' T',
@@ -81,31 +90,36 @@ class PriceTierShiftReport extends ReportBase
             'expensive' => number_format($p66 + 1) . ' T and up',
         ];
 
+        $out = [];
         foreach ($tiers as $key => $t) {
             $changePct = ($t['qty_before'] > 0)
                 ? (int) round((($t['qty_after'] - $t['qty_before']) / $t['qty_before']) * 100)
                 : null;
 
+            $shareBefore = $totalBefore > 0 ? round(($t['qty_before'] / $totalBefore) * 100) : 0;
+            $shareAfter  = $totalAfter  > 0 ? round(($t['qty_after']  / $totalAfter)  * 100) : 0;
+
             $out[] = [
-                'key'         => $key,
-                'name'        => $labels[$key],
-                'range'       => $ranges[$key],
-                'qty_before'  => $t['qty_before'],
-                'qty_after'   => $t['qty_after'],
-                'rev_before'  => $t['rev_before'],
-                'rev_after'   => $t['rev_after'],
-                'change_pct'  => $changePct,
+                'key'          => $key,
+                'name'         => $labels[$key],
+                'range'        => $ranges[$key],
+                'qty_before'   => $t['qty_before'],
+                'qty_after'    => $t['qty_after'],
+                'rev_before'   => $t['rev_before'],
+                'rev_after'    => $t['rev_after'],
+                'share_before' => $shareBefore,
+                'share_after'  => $shareAfter,
+                'share_delta'  => $shareAfter - $shareBefore,
+                'change_pct'   => $changePct,
             ];
         }
 
-        $totalBefore = $tiers['cheap']['qty_before'] + $tiers['medium']['qty_before'] + $tiers['expensive']['qty_before'];
-        $totalAfter  = $tiers['cheap']['qty_after'] + $tiers['medium']['qty_after'] + $tiers['expensive']['qty_after'];
-
         return [
-            'tiers'         => $out,
-            'total_before'  => $totalBefore,
-            'total_after'   => $totalAfter,
-            'period_split'  => $midDate,
+            'tiers'        => $out,
+            'total_before' => $totalBefore,
+            'total_after'  => $totalAfter,
+            'period_split' => $midDate,
+            'reason'       => $reason,
         ];
     }
 }

@@ -1,36 +1,210 @@
 // assets/js/admin/analytics-vue.js
-// Vue 3 analytics dashboard for the admin panel.
-// Phase 4 + Phase 3.2 + layout reorder.
-// ASCII-only source. No em-dashes, no ellipsis chars, no smart quotes.
+// Vue 3 analytics dashboard.
+// Phase 4 + 3.2 + AI curation + Jalali calendar + friendly errors.
+// ASCII-only source.
 
+// =============================================================
+// Jalali date utilities - client-side, no dependencies.
+// =============================================================
+var JalaliUtil = (function () {
+    var MONTHS = ['Farvardin','Ordibehesht','Khordad','Tir','Mordad','Shahrivar',
+                  'Mehr','Aban','Azar','Dey','Bahman','Esfand'];
+    var SHORT  = ['Far','Ord','Kho','Tir','Mor','Sha',
+                  'Meh','Aba','Aza','Dey','Bah','Esf'];
+
+    function isLeapJalali(jy) {
+        var r = jy % 33;
+        return [1,5,9,13,17,22,26,30].indexOf(r) !== -1;
+    }
+    function isLeapGregorian(gy) {
+        return ((gy % 4 === 0) && (gy % 100 !== 0)) || (gy % 400 === 0);
+    }
+
+    function gToJ(gYear, gMonth, gDay) {
+        var gDays = [0,31,59,90,120,151,181,212,243,273,304,334];
+        var gy = gYear - 1600;
+        var gm = gMonth - 1;
+        var gd = gDay - 1;
+
+        var gDayNo = 365 * gy
+            + Math.floor((gy + 3) / 4)
+            - Math.floor((gy + 99) / 100)
+            + Math.floor((gy + 399) / 400);
+        gDayNo += gDays[gm];
+        if (gm > 1 && ((gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0)) gDayNo++;
+        gDayNo += gd;
+
+        var jDayNo = gDayNo - 79;
+        var jNp = Math.floor(jDayNo / 12053);
+        jDayNo %= 12053;
+
+        var jy = 979 + 33 * jNp + 4 * Math.floor(jDayNo / 1461);
+        jDayNo %= 1461;
+
+        if (jDayNo >= 366) {
+            jy += Math.floor((jDayNo - 1) / 365);
+            jDayNo = (jDayNo - 1) % 365;
+        }
+
+        var jMonths = [31,31,31,31,31,31,30,30,30,30,30,29];
+        var jm = 1, jd = 1;
+        for (var i = 0; i < 12; i++) {
+            if (jDayNo < jMonths[i]) { jm = i + 1; jd = jDayNo + 1; break; }
+            jDayNo -= jMonths[i];
+        }
+        return [jy, jm, jd];
+    }
+
+    function jToG(jYear, jMonth, jDay) {
+        var jMonths = [31,31,31,31,31,31,30,30,30,30,30,29];
+        if (isLeapJalali(jYear)) jMonths[11] = 30;
+
+        var jDayNo = 0;
+        for (var y = 1; y < jYear; y++) jDayNo += isLeapJalali(y) ? 366 : 365;
+        for (var m = 0; m < jMonth - 1; m++) jDayNo += jMonths[m];
+        jDayNo += jDay - 1;
+
+        var gEpochDays = 226894;
+        var gDayNo = jDayNo + gEpochDays;
+
+        var gYear = 1;
+        while (gDayNo >= 365) {
+            var daysInYear = isLeapGregorian(gYear) ? 366 : 365;
+            if (gDayNo < daysInYear) break;
+            gDayNo -= daysInYear;
+            gYear++;
+        }
+
+        var gMonths = [31,28,31,30,31,30,31,31,30,31,30,31];
+        if (isLeapGregorian(gYear)) gMonths[1] = 29;
+        var gMonth = 1;
+        for (var i = 0; i < 12; i++) {
+            if (gDayNo < gMonths[i]) break;
+            gDayNo -= gMonths[i];
+            gMonth++;
+        }
+        var gDay = gDayNo + 1;
+        return [gYear, gMonth, gDay];
+    }
+
+    function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+    function isoToParts(iso) {
+        if (!iso || typeof iso !== 'string') return null;
+        var p = iso.split('-');
+        if (p.length < 3) return null;
+        var gy = parseInt(p[0], 10), gm = parseInt(p[1], 10), gd = parseInt(p[2], 10);
+        if (isNaN(gy) || isNaN(gm) || isNaN(gd)) return null;
+        var j = gToJ(gy, gm, gd);
+        return { year: j[0], month: j[1], day: j[2] };
+    }
+
+    function partsToIso(jy, jm, jd) {
+        var g = jToG(jy, jm, jd);
+        return g[0] + '-' + pad2(g[1]) + '-' + pad2(g[2]);
+    }
+
+    function daysInMonth(jy, jm) {
+        if (jm <= 6) return 31;
+        if (jm <= 11) return 30;
+        return isLeapJalali(jy) ? 30 : 29;
+    }
+
+    function firstDayOfWeek(jy, jm) {
+        var g = jToG(jy, jm, 1);
+        var d = new Date(g[0], g[1] - 1, g[2]);
+        return d.getDay();
+    }
+
+    return {
+        numeric: function (iso) {
+            var j = isoToParts(iso);
+            if (!j) return iso || '';
+            return j.year + '/' + pad2(j.month) + '/' + pad2(j.day);
+        },
+        long: function (iso) {
+            var j = isoToParts(iso);
+            if (!j) return iso || '';
+            return j.day + ' ' + MONTHS[j.month - 1] + ' ' + j.year;
+        },
+        short: function (iso) {
+            var j = isoToParts(iso);
+            if (!j) return iso || '';
+            return j.day + ' ' + SHORT[j.month - 1];
+        },
+        toParts: isoToParts,
+        toIso: partsToIso,
+        daysInMonth: daysInMonth,
+        firstDayOfWeek: firstDayOfWeek,
+        isLeapJalali: isLeapJalali,
+        monthName: function (m) { return MONTHS[m - 1] || ''; },
+        monthShort: function (m) { return SHORT[m - 1] || ''; }
+    };
+})();
+window.JalaliUtil = JalaliUtil;
+
+// =============================================================
+// Friendly error mapping.
+// =============================================================
+function friendlyError(raw) {
+    if (!raw) return 'Something went wrong. Please try again.';
+    var e = String(raw).toLowerCase();
+    if (e.indexOf('no configured providers') !== -1 ||
+        e.indexOf('all providers failed') !== -1) {
+        return 'The AI service is temporarily unavailable. Please try again in a few minutes.';
+    }
+    if (e.indexOf('too many') !== -1 || e.indexOf('rate limit') !== -1 || e.indexOf('429') !== -1) {
+        return 'You have reached the hourly AI request limit. Please wait and try again later.';
+    }
+    if (e.indexOf('insufficient balance') !== -1 || e.indexOf('quota') !== -1) {
+        return 'The AI service quota has been exhausted. Please contact the administrator.';
+    }
+    if (e.indexOf('network') !== -1 || e.indexOf('fetch') !== -1) {
+        return 'Connection problem. Please check your network and try again.';
+    }
+    if (e.indexOf('timeout') !== -1) {
+        return 'The AI request took too long. Please try again.';
+    }
+    if (e.indexOf('unknown report') !== -1) {
+        return 'This report is not available right now. Please refresh the page.';
+    }
+    if (e.indexOf('invalid start') !== -1 ||
+        e.indexOf('invalid end') !== -1 ||
+        e.indexOf('invalid date') !== -1) {
+        return 'Please choose a valid date range.';
+    }
+    return 'Something went wrong. Please try again in a few minutes.';
+}
+window.friendlyError = friendlyError;
+
+// =============================================================
+// Vue app
+// =============================================================
 function startAnalyticsApp() {
     console.log('[analytics-vue] starting');
 
-    if (typeof Vue === 'undefined') {
-        console.error('[analytics-vue] Vue 3 not loaded');
-        return;
-    }
-    if (typeof Chart === 'undefined') {
-        console.error('[analytics-vue] Chart.js not loaded');
-        return;
-    }
+    if (typeof Vue === 'undefined')   { console.error('[analytics-vue] Vue missing');   return; }
+    if (typeof Chart === 'undefined') { console.error('[analytics-vue] Chart missing'); return; }
 
-    const { createApp, reactive, computed, nextTick } = Vue;
+    const { createApp, reactive, computed, nextTick, onMounted, onUnmounted, ref } = Vue;
     const initial = window.__ANALYTICS_DATA__ || {};
 
     const store = reactive({
         start: initial.start || '',
         end:   initial.end   || '',
-        reports: initial.reports || {},
+        mode:  initial.mode  || 'sql',
+        sqlReports: initial.reports || {},
+        aiReports:  null,
         loading: false,
-        lastRefreshed: null,
         aiSummaries: {},
         aiLoading:   {},
         aiVisible:   {},
+        aiReview: null,
+        aiReviewLoading: false,
     });
 
     window.__ANALYTICS_STORE__ = store;
-    console.log('[analytics-vue] store ready. Reports:', Object.keys(store.reports));
+    console.log('[analytics-vue] store ready. Reports:', Object.keys(store.sqlReports));
 
     // ---- Helpers ----
 
@@ -38,31 +212,70 @@ function startAnalyticsApp() {
         return ('' + n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     }
 
-    function formatDateHuman(iso) {
-        const d = new Date(iso + 'T00:00:00');
-        return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-    }
+    const currentReports = computed(function () {
+        if (store.mode === 'ai' && store.aiReports) return store.aiReports;
+        return store.sqlReports;
+    });
 
-    // ---- Report loading ----
+    const rangeText = computed(function () {
+        if (!store.start || !store.end) return '';
+        var a = new Date(store.start + 'T00:00:00');
+        var b = new Date(store.end + 'T00:00:00');
+        var days = Math.round((b - a) / 86400000) + 1;
+        var startJ = JalaliUtil.long(store.start);
+        var endJ   = JalaliUtil.long(store.end);
+        if (days === 1) return startJ;
+        var sp = startJ.split(' ');
+        var ep = endJ.split(' ');
+        var left = (sp[2] === ep[2]) ? (sp[0] + ' ' + sp[1]) : startJ;
+        return left + ' to ' + endJ + '  (' + days + ' days)';
+    });
 
-    async function fetchReports(force) {
+    // ---- Data loading ----
+
+    async function fetchReports() {
         if (store.loading) return;
         store.loading = true;
         try {
             const url = 'analytics.php?api=reports'
+                + '&mode='  + store.mode
                 + '&start=' + encodeURIComponent(store.start)
-                + '&end=' + encodeURIComponent(store.end)
-                + (force ? '&refresh=1' : '');
+                + '&end='   + encodeURIComponent(store.end);
             const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             if (!res.ok) throw new Error('HTTP ' + res.status);
             const data = await res.json();
-            if (data.reports) {
-                store.reports = data.reports;
-                store.lastRefreshed = new Date();
-            }
+            if (data.mode === 'ai') store.aiReports = data.reports || null;
+            else store.sqlReports = data.reports || {};
         } catch (err) {
             console.error('[analytics-vue] fetch failed:', err);
-            alert('Could not load analytics. Try again.');
+        } finally {
+            store.loading = false;
+        }
+    }
+
+    async function recompute() {
+        if (store.loading) return;
+        store.loading = true;
+        try {
+            const url = 'analytics.php?api=recompute'
+                + '&mode='  + store.mode
+                + '&start=' + encodeURIComponent(store.start)
+                + '&end='   + encodeURIComponent(store.end);
+            const res = await fetch(url, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            if (data.mode === 'ai') {
+                store.aiReports = data.reports || null;
+            } else {
+                store.sqlReports = data.reports || {};
+                store.aiReports  = null;
+            }
+            store.aiSummaries = {};
+            store.aiVisible   = {};
+            store.aiReview    = null;
+        } catch (err) {
+            console.error('[analytics-vue] recompute failed:', err);
+            alert('Could not refresh the reports. Please check your connection and try again.');
         } finally {
             store.loading = false;
         }
@@ -75,25 +288,27 @@ function startAnalyticsApp() {
         store.end   = end.toISOString().slice(0, 10);
         store.start = start.toISOString().slice(0, 10);
         store.aiSummaries = {};
-        store.aiVisible = {};
-        fetchReports(false);
+        store.aiVisible   = {};
+        store.aiReview    = null;
+        store.aiReports   = null;
+        fetchReports();
     }
 
     function applyCustomRange() {
         if (!store.start || !store.end) return;
-        if (store.start > store.end) {
-            alert('Start date must be before end date.');
-            return;
-        }
+        if (store.start > store.end) { alert('Start date must be before end date.'); return; }
         store.aiSummaries = {};
-        store.aiVisible = {};
-        fetchReports(false);
+        store.aiVisible   = {};
+        store.aiReview    = null;
+        store.aiReports   = null;
+        fetchReports();
     }
 
-    function forceRefresh() {
-        store.aiSummaries = {};
-        store.aiVisible = {};
-        fetchReports(true);
+    function setMode(mode) {
+        if (mode !== 'sql' && mode !== 'ai') return;
+        if (store.mode === mode) return;
+        store.mode = mode;
+        if (mode === 'ai' && !store.aiReports) fetchReports();
     }
 
     // ---- AI narration ----
@@ -105,40 +320,56 @@ function startAnalyticsApp() {
                 + '&start=' + encodeURIComponent(store.start)
                 + '&end='   + encodeURIComponent(store.end)
                 + (force ? '&force=1' : '');
-
-            const res = await fetch(url, {
-                headers: { 'X-Requested-With': 'XMLHttpRequest' },
-            });
+            const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             const data = await res.json();
-
             if (data.ok) {
-                store.aiSummaries[key] = {
-                    text:     data.text || '',
-                    provider: data.provider || null,
-                    cached:   !!data.cached,
-                };
+                store.aiSummaries[key] = { text: data.text || '', provider: data.provider || null, cached: !!data.cached };
             } else {
-                store.aiSummaries[key] = { error: data.error || 'AI unavailable' };
+                store.aiSummaries[key] = { error: friendlyError(data.error) };
             }
         } catch (err) {
-            console.error('[analytics-vue] explain fetch failed:', err);
-            store.aiSummaries[key] = { error: 'Network error. Please try again.' };
+            console.error('[analytics-vue] explain failed:', err);
+            store.aiSummaries[key] = { error: friendlyError('network') };
         } finally {
             store.aiLoading[key] = false;
         }
     }
 
     function toggleExplain(key, force) {
-        if (store.aiSummaries[key] && !force) {
-            store.aiVisible[key] = !store.aiVisible[key];
-            return;
-        }
+        if (store.aiSummaries[key] && !force) { store.aiVisible[key] = !store.aiVisible[key]; return; }
         if (store.aiLoading[key]) return;
         if (force) store.aiSummaries[key] = null;
         store.aiLoading[key] = true;
         store.aiVisible[key] = true;
         fetchExplain(key, force);
     }
+
+    // ---- Executive review ----
+
+    async function fetchAiReview(force) {
+        if (store.aiReviewLoading) return;
+        store.aiReviewLoading = true;
+        try {
+            const url = 'analytics.php?api=summary_review'
+                + '&start=' + encodeURIComponent(store.start)
+                + '&end='   + encodeURIComponent(store.end)
+                + (force ? '&force=1' : '');
+            const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const data = await res.json();
+            if (data.ok) {
+                store.aiReview = { text: data.text || '', provider: data.provider || null, cached: !!data.cached };
+            } else {
+                store.aiReview = { error: friendlyError(data.error) };
+            }
+        } catch (err) {
+            console.error('[analytics-vue] review failed:', err);
+            store.aiReview = { error: friendlyError('network') };
+        } finally {
+            store.aiReviewLoading = false;
+        }
+    }
+
+    function regenerateReview() { store.aiReview = null; fetchAiReview(true); }
 
     // ---- Charts ----
 
@@ -147,73 +378,42 @@ function startAnalyticsApp() {
     function renderRevenueChart() {
         const canvas = document.getElementById('chart-revenue');
         if (!canvas) return;
-        const trend = store.reports.revenue_trend && store.reports.revenue_trend.data;
+        const trend = currentReports.value.revenue_trend && currentReports.value.revenue_trend.data;
         if (!trend || !Array.isArray(trend.days)) return;
 
-        const labels  = trend.days.map(function (d) { return formatDateHuman(d.date); });
+        const labels  = trend.days.map(function (d) { return JalaliUtil.short(d.date); });
         const revenue = trend.days.map(function (d) { return d.revenue; });
         const orders  = trend.days.map(function (d) { return d.orders; });
 
         if (charts.revenue) charts.revenue.destroy();
-
         charts.revenue = new Chart(canvas, {
             type: 'line',
             data: {
                 labels: labels,
                 datasets: [
-                    {
-                        label: 'Revenue (T)',
-                        data: revenue,
-                        borderColor: '#6f4e37',
-                        backgroundColor: 'rgba(111,78,55,0.10)',
-                        borderWidth: 2,
-                        tension: 0.35,
-                        fill: true,
-                        pointRadius: 2,
-                        pointHoverRadius: 5,
-                        yAxisID: 'y',
-                    },
-                    {
-                        label: 'Orders',
-                        data: orders,
-                        borderColor: '#22c55e',
-                        backgroundColor: 'rgba(34,197,94,0.0)',
-                        borderWidth: 2,
-                        tension: 0.35,
-                        pointRadius: 2,
-                        pointHoverRadius: 5,
-                        yAxisID: 'y1',
-                    },
+                    { label: 'Revenue (T)', data: revenue, borderColor: '#6f4e37',
+                      backgroundColor: 'rgba(111,78,55,0.10)', borderWidth: 2, tension: 0.35,
+                      fill: true, pointRadius: 2, pointHoverRadius: 5, yAxisID: 'y' },
+                    { label: 'Orders', data: orders, borderColor: '#22c55e',
+                      backgroundColor: 'rgba(34,197,94,0)', borderWidth: 2, tension: 0.35,
+                      pointRadius: 2, pointHoverRadius: 5, yAxisID: 'y1' },
                 ],
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: false,
+                responsive: true, maintainAspectRatio: false,
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
                     legend: { position: 'top', labels: { font: { family: 'Inter' } } },
-                    tooltip: {
-                        callbacks: {
-                            label: function (ctx) {
-                                const v = ctx.parsed.y;
-                                return ctx.dataset.label + ': ' + v.toLocaleString();
-                            },
-                        },
-                    },
+                    tooltip: { callbacks: { label: function (ctx) {
+                        return ctx.dataset.label + ': ' + ctx.parsed.y.toLocaleString();
+                    } } },
                 },
                 scales: {
-                    y: {
-                        position: 'left',
-                        beginAtZero: true,
-                        ticks: { callback: function (v) { return v.toLocaleString(); } },
-                    },
-                    y1: {
-                        position: 'right',
-                        beginAtZero: true,
-                        grid: { drawOnChartArea: false },
-                        ticks: { precision: 0 },
-                    },
-                    x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 10 } },
+                    y:  { position: 'left',  beginAtZero: true,
+                          ticks: { callback: function (v) { return v.toLocaleString(); } } },
+                    y1: { position: 'right', beginAtZero: true,
+                          grid: { drawOnChartArea: false }, ticks: { precision: 0 } },
+                    x:  { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 10 } },
                 },
             },
         });
@@ -222,38 +422,27 @@ function startAnalyticsApp() {
     function renderTopItemsChart() {
         const canvas = document.getElementById('chart-top-items');
         if (!canvas) return;
-        const top = store.reports.top_items && store.reports.top_items.data;
+        const top = currentReports.value.top_items && currentReports.value.top_items.data;
         if (!top || !Array.isArray(top.items)) return;
 
         const labels = top.items.map(function (i) { return i.name; });
         const qty    = top.items.map(function (i) { return i.qty; });
 
         if (charts.topItems) charts.topItems.destroy();
-
         charts.topItems = new Chart(canvas, {
             type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Quantity sold',
-                    data: qty,
-                    backgroundColor: 'rgba(111,78,55,0.75)',
-                    borderColor: '#6f4e37',
-                    borderWidth: 1,
-                    borderRadius: 4,
-                }],
-            },
+            data: { labels: labels, datasets: [{
+                label: 'Quantity sold', data: qty,
+                backgroundColor: 'rgba(111,78,55,0.75)', borderColor: '#6f4e37',
+                borderWidth: 1, borderRadius: 4,
+            }] },
             options: {
-                indexAxis: 'y',
-                responsive: true,
-                maintainAspectRatio: false,
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
                 plugins: {
                     legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: function (ctx) { return ctx.parsed.x.toLocaleString() + ' sold'; },
-                        },
-                    },
+                    tooltip: { callbacks: { label: function (ctx) {
+                        return ctx.parsed.x.toLocaleString() + ' sold';
+                    } } },
                 },
                 scales: {
                     x: { beginAtZero: true, ticks: { precision: 0 } },
@@ -264,16 +453,133 @@ function startAnalyticsApp() {
     }
 
     function renderAllCharts() {
-        nextTick(function () {
-            renderRevenueChart();
-            renderTopItemsChart();
-        });
+        nextTick(function () { renderRevenueChart(); renderTopItemsChart(); });
     }
 
     window.addEventListener('resize', function () {
         if (charts.revenue)  { try { charts.revenue.resize();  } catch (e) {} }
         if (charts.topItems) { try { charts.topItems.resize(); } catch (e) {} }
     });
+
+    // ---- Jalali calendar component ----
+
+    const JalaliCalendar = {
+        props: ['modelValue'],
+        emits: ['update:modelValue'],
+        template: `
+            <div class="jalali-picker" ref="wrap" @click.stop>
+                <button type="button" class="jalali-picker-btn" @click="toggle">
+                    <i class="fas fa-calendar"></i>
+                    <span>{{ displayValue }}</span>
+                </button>
+                <div v-if="open" class="calendar-popup">
+                    <div class="calendar-header">
+                        <button type="button" @click="prevMonth" aria-label="Previous month">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <span class="calendar-title">{{ monthName }} {{ viewYear }}</span>
+                        <button type="button" @click="nextMonth" aria-label="Next month">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                    <div class="calendar-grid">
+                        <div v-for="name in dayNames" :key="'h-' + name" class="calendar-day-name">{{ name }}</div>
+                        <div v-for="i in firstWeekday" :key="'b-' + i" class="day-cell blank"></div>
+                        <div v-for="day in days" :key="day.iso"
+                             class="day-cell"
+                             :class="{ today: day.isToday, selected: day.isSelected }"
+                             @click="pick(day)">
+                            {{ day.day }}
+                        </div>
+                    </div>
+                    <div class="calendar-footer">
+                        <button type="button" class="calendar-today-btn" @click="jumpToday">
+                            <i class="fas fa-calendar-day"></i> Jump to today
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `,
+        setup(props, { emit }) {
+            const wrap = ref(null);
+            const todayIso = new Date().toISOString().slice(0, 10);
+            const todayJ   = JalaliUtil.toParts(todayIso);
+            const initJ    = props.modelValue ? JalaliUtil.toParts(props.modelValue) : todayJ;
+
+            const state = reactive({
+                year:  initJ ? initJ.year : todayJ.year,
+                month: initJ ? initJ.month : todayJ.month,
+                open: false,
+            });
+
+            const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+            const displayValue = computed(function () {
+                if (!props.modelValue) return 'Select date';
+                return JalaliUtil.numeric(props.modelValue);
+            });
+
+            const monthName    = computed(function () { return JalaliUtil.monthName(state.month); });
+            const viewYear     = computed(function () { return state.year; });
+            const open         = computed(function () { return state.open; });
+            const firstWeekday = computed(function () {
+                return JalaliUtil.firstDayOfWeek(state.year, state.month);
+            });
+
+            const days = computed(function () {
+                var out = [];
+                var dim = JalaliUtil.daysInMonth(state.year, state.month);
+                for (var d = 1; d <= dim; d++) {
+                    var iso = JalaliUtil.toIso(state.year, state.month, d);
+                    out.push({
+                        day: d,
+                        iso: iso,
+                        isToday: iso === todayIso,
+                        isSelected: iso === props.modelValue,
+                    });
+                }
+                return out;
+            });
+
+            function toggle() { state.open = !state.open; }
+            function prevMonth() {
+                if (state.month === 1) { state.month = 12; state.year--; }
+                else state.month--;
+            }
+            function nextMonth() {
+                if (state.month === 12) { state.month = 1; state.year++; }
+                else state.month++;
+            }
+            function pick(day) {
+                emit('update:modelValue', day.iso);
+                state.open = false;
+            }
+            function jumpToday() {
+                var p = JalaliUtil.toParts(todayIso);
+                state.year = p.year;
+                state.month = p.month;
+                emit('update:modelValue', todayIso);
+                state.open = false;
+            }
+            function onDocClick(e) {
+                if (!state.open) return;
+                if (wrap.value && !wrap.value.contains(e.target)) {
+                    state.open = false;
+                }
+            }
+
+            onMounted(function () { document.addEventListener('click', onDocClick); });
+            onUnmounted(function () { document.removeEventListener('click', onDocClick); });
+
+            return {
+                wrap: wrap, state: state,
+                displayValue: displayValue, monthName: monthName, viewYear: viewYear,
+                open: open, firstWeekday: firstWeekday, days: days, dayNames: dayNames,
+                toggle: toggle, prevMonth: prevMonth, nextMonth: nextMonth,
+                pick: pick, jumpToday: jumpToday,
+            };
+        }
+    };
 
     // ---- Shared sub-components ----
 
@@ -286,16 +592,12 @@ function startAnalyticsApp() {
             </button>
         `,
         setup(props) {
-            const loading = computed(function () {
-                return !!store.aiLoading[props.reportKey];
-            });
+            const loading = computed(function () { return !!store.aiLoading[props.reportKey]; });
             const hasSummary = computed(function () {
                 const s = store.aiSummaries[props.reportKey];
                 return !!(s && s.text);
             });
-            const isVisible = computed(function () {
-                return !!store.aiVisible[props.reportKey];
-            });
+            const isVisible = computed(function () { return !!store.aiVisible[props.reportKey]; });
             const iconClass = computed(function () {
                 if (loading.value) return 'fas fa-circle-notch fa-spin';
                 if (hasSummary.value && isVisible.value) return 'fas fa-eye-slash';
@@ -306,8 +608,8 @@ function startAnalyticsApp() {
                 if (hasSummary.value && isVisible.value) return 'Hide';
                 return 'Explain';
             });
-            function click() { toggleExplain(props.reportKey, false); }
-            return { loading, iconClass, label, click };
+            return { loading: loading, iconClass: iconClass, label: label,
+                     click: function () { toggleExplain(props.reportKey, false); } };
         }
     };
 
@@ -330,7 +632,8 @@ function startAnalyticsApp() {
                     <div class="ai-summary-header">
                         <span class="ai-summary-badge"><i class="fas fa-wand-magic-sparkles"></i> AI</span>
                         <span v-if="providerText" class="ai-summary-provider">{{ providerText }}</span>
-                        <button type="button" class="ai-summary-regen" @click="regenerate" :disabled="loading" title="Regenerate">
+                        <button type="button" class="ai-summary-regen" @click="regenerate"
+                                :disabled="loading" title="Regenerate">
                             <i class="fas fa-sync"></i>
                         </button>
                     </div>
@@ -361,22 +664,26 @@ function startAnalyticsApp() {
                 if (errorText.value) return 'state-error';
                 return 'state-ready';
             });
-            function retry() { toggleExplain(props.reportKey, true); }
-            function regenerate() { toggleExplain(props.reportKey, true); }
-            return { loading, visible, summaryText, errorText, providerText, stateClass, retry, regenerate };
+            return {
+                loading: loading, visible: visible, summaryText: summaryText,
+                errorText: errorText, providerText: providerText, stateClass: stateClass,
+                retry:      function () { toggleExplain(props.reportKey, true); },
+                regenerate: function () { toggleExplain(props.reportKey, true); },
+            };
         }
     };
 
-    // ---- Toolbar & Summary ----
+    // ---- Toolbar ----
 
     const Toolbar = {
+        components: { JalaliCalendar: JalaliCalendar },
         template: `
             <div class="analytics-toolbar">
                 <div class="toolbar-left">
                     <span class="toolbar-label"><i class="fas fa-calendar"></i> Range:</span>
-                    <input type="date" class="date-input" v-model="store.start">
+                    <JalaliCalendar v-model="store.start"></JalaliCalendar>
                     <span class="range-sep">to</span>
-                    <input type="date" class="date-input" v-model="store.end">
+                    <JalaliCalendar v-model="store.end"></JalaliCalendar>
                     <button type="button" class="btn-apply" @click="applyCustom">Apply</button>
                 </div>
                 <div class="toolbar-quick">
@@ -387,27 +694,79 @@ function startAnalyticsApp() {
                 <div class="toolbar-right">
                     <button type="button" class="btn-refresh" :disabled="store.loading" @click="refresh">
                         <i :class="store.loading ? 'fas fa-circle-notch fa-spin' : 'fas fa-sync'"></i>
-                        {{ store.loading ? 'Loading...' : 'Refresh' }}
+                        {{ store.loading ? 'Working...' : 'Refresh' }}
                     </button>
                 </div>
             </div>
         `,
         setup() {
             return {
-                store,
-                setRange: function (n) { applyRange(n); },
+                store: store,
+                setRange:    function (n) { applyRange(n); },
                 applyCustom: applyCustomRange,
-                refresh: forceRefresh,
+                refresh:     recompute,
             };
         }
     };
 
+    // ---- Summary card ----
+
     const SummaryCard = {
         template: `
             <div class="report-card summary-card">
-                <div class="report-title-row">
-                    <h3 class="report-title"><i class="fas fa-chart-pie"></i> Summary</h3>
+                <div class="report-title-row summary-title-row">
+                    <div class="summary-title-left">
+                        <h3 class="report-title"><i class="fas fa-chart-pie"></i> Summary</h3>
+                    </div>
+                    <div class="summary-range" v-if="rangeText">{{ rangeText }}</div>
+                    <div class="summary-toggle" role="tablist">
+                        <button type="button" class="summary-toggle-btn"
+                                :class="{ active: store.mode === 'sql' }"
+                                @click="setMode('sql')">
+                            <i class="fas fa-calculator"></i>
+                            <span>SQL</span>
+                        </button>
+                        <button type="button" class="summary-toggle-btn summary-toggle-ai"
+                                :class="{ active: store.mode === 'ai' }"
+                                @click="setMode('ai')">
+                            <i class="fas fa-wand-magic-sparkles"></i>
+                            <span>AI</span>
+                        </button>
+                    </div>
                 </div>
+
+                <div v-if="store.mode === 'ai'" class="ai-review">
+                    <div v-if="store.aiReviewLoading" class="ai-review-loading">
+                        <i class="fas fa-circle-notch fa-spin"></i>
+                        <span>Writing an executive review...</span>
+                    </div>
+                    <template v-else-if="store.aiReview && store.aiReview.error">
+                        <div class="ai-review-error">
+                            <i class="fas fa-exclamation-circle"></i>
+                            <span>{{ store.aiReview.error }}</span>
+                            <button type="button" class="ai-summary-retry" @click="regen">Retry</button>
+                        </div>
+                    </template>
+                    <template v-else-if="store.aiReview && store.aiReview.text">
+                        <div class="ai-review-header">
+                            <span class="ai-review-badge"><i class="fas fa-wand-magic-sparkles"></i> AI Review</span>
+                            <span v-if="reviewProvider" class="ai-summary-provider">{{ reviewProvider }}</span>
+                            <button type="button" class="ai-summary-regen" @click="regen"
+                                    :disabled="store.aiReviewLoading" title="Regenerate">
+                                <i class="fas fa-sync"></i>
+                            </button>
+                        </div>
+                        <p class="ai-review-text">{{ store.aiReview.text }}</p>
+                    </template>
+                    <template v-else>
+                        <div class="ai-review-empty">
+                            <i class="fas fa-wand-magic-sparkles"></i>
+                            <span>Click <strong>Refresh</strong> to compute AI-curated data and a fresh review.</span>
+                            <button type="button" class="ai-summary-retry" @click="regen">Review now</button>
+                        </div>
+                    </template>
+                </div>
+
                 <div class="summary-grid">
                     <div class="stat">
                         <div class="stat-label">Total Revenue</div>
@@ -430,23 +789,32 @@ function startAnalyticsApp() {
         `,
         setup() {
             const summary = computed(function () {
-                const rt = store.reports.revenue_trend;
+                const rt = currentReports.value.revenue_trend;
                 return (rt && rt.data && rt.data.summary) ? rt.data.summary : {};
             });
+            const reviewProvider = computed(function () {
+                if (!store.aiReview) return '';
+                if (store.aiReview.cached) return 'from cache';
+                if (store.aiReview.provider) return 'via ' + store.aiReview.provider;
+                return '';
+            });
             return {
-                formatNumber,
-                revenue: computed(function () { return summary.value.total_revenue || 0; }),
-                orders: computed(function () { return summary.value.total_orders || 0; }),
-                aov: computed(function () { return summary.value.avg_order_value || 0; }),
+                store: store, formatNumber: formatNumber, rangeText: rangeText,
+                revenue:        computed(function () { return summary.value.total_revenue || 0; }),
+                orders:         computed(function () { return summary.value.total_orders || 0; }),
+                aov:            computed(function () { return summary.value.avg_order_value || 0; }),
                 daysWithOrders: computed(function () { return summary.value.days_with_orders || 0; }),
+                reviewProvider: reviewProvider,
+                setMode: setMode,
+                regen: regenerateReview,
             };
         }
     };
 
-    // ---- Report components ----
+    // ---- Core reports ----
 
     const RevenueChart = {
-        components: { AiExplainButton, AiSummaryCard },
+        components: { AiExplainButton: AiExplainButton, AiSummaryCard: AiSummaryCard },
         template: `
             <div class="report-card">
                 <div class="report-title-row">
@@ -460,20 +828,20 @@ function startAnalyticsApp() {
         `,
         setup() {
             const title = computed(function () {
-                const rt = store.reports.revenue_trend;
+                const rt = currentReports.value.revenue_trend;
                 return (rt && rt.title) ? rt.title : 'Revenue Trend';
             });
             const hasData = computed(function () {
-                const rt = store.reports.revenue_trend;
+                const rt = currentReports.value.revenue_trend;
                 const d = rt && rt.data;
                 return d && Array.isArray(d.days) && d.days.length > 0;
             });
-            return { store, title, hasData };
+            return { store: store, title: title, hasData: hasData };
         }
     };
 
     const TopItemsChart = {
-        components: { AiExplainButton, AiSummaryCard },
+        components: { AiExplainButton: AiExplainButton, AiSummaryCard: AiSummaryCard },
         template: `
             <div class="report-card">
                 <div class="report-title-row">
@@ -489,20 +857,64 @@ function startAnalyticsApp() {
         `,
         setup() {
             const title = computed(function () {
-                const ti = store.reports.top_items;
+                const ti = currentReports.value.top_items;
                 return (ti && ti.title) ? ti.title : 'Top Items';
             });
             const hasData = computed(function () {
-                const ti = store.reports.top_items;
+                const ti = currentReports.value.top_items;
                 const d = ti && ti.data;
                 return d && Array.isArray(d.items) && d.items.length > 0;
             });
-            return { store, title, hasData };
+            return { store: store, title: title, hasData: hasData };
+        }
+    };
+
+    const LeastItemsTable = {
+        components: { AiExplainButton: AiExplainButton, AiSummaryCard: AiSummaryCard },
+        template: `
+            <div class="report-card">
+                <div class="report-title-row">
+                    <h3 class="report-title"><i class="fas fa-snowflake"></i> {{ title }}</h3>
+                    <AiExplainButton reportKey="least_items"></AiExplainButton>
+                </div>
+                <div v-if="hasData" class="table-wrap">
+                    <table class="report-table">
+                        <thead>
+                            <tr><th>Item</th><th class="num">Sold</th><th class="num">Revenue (T)</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="item in items" :key="item.id">
+                                <td>{{ item.name }}</td>
+                                <td class="num">{{ item.qty }}</td>
+                                <td class="num">{{ formatNumber(item.revenue) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div v-else class="empty-state"><i class="fas fa-inbox"></i> No data in this range.</div>
+                <AiSummaryCard reportKey="least_items"></AiSummaryCard>
+            </div>
+        `,
+        setup() {
+            const items = computed(function () {
+                const li = currentReports.value.least_items;
+                const d = li && li.data;
+                return (d && Array.isArray(d.items)) ? d.items : [];
+            });
+            const title = computed(function () {
+                const li = currentReports.value.least_items;
+                return (li && li.title) ? li.title : 'Least-Selling Items';
+            });
+            return {
+                store: store, title: title, items: items,
+                hasData: computed(function () { return items.value.length > 0; }),
+                formatNumber: formatNumber,
+            };
         }
     };
 
     const HeatmapGrid = {
-        components: { AiExplainButton, AiSummaryCard },
+        components: { AiExplainButton: AiExplainButton, AiSummaryCard: AiSummaryCard },
         template: `
             <div class="report-card report-card-wide">
                 <div class="report-title-row">
@@ -533,139 +945,53 @@ function startAnalyticsApp() {
         `,
         setup() {
             const title = computed(function () {
-                const hm = store.reports.hourly_heatmap;
+                const hm = currentReports.value.hourly_heatmap;
                 return (hm && hm.title) ? hm.title : 'Orders by Hour';
             });
             const grid = computed(function () {
-                const hm = store.reports.hourly_heatmap;
+                const hm = currentReports.value.hourly_heatmap;
                 const d = hm && hm.data;
                 return (d && Array.isArray(d.grid)) ? d.grid : [];
             });
             const max = computed(function () {
-                const hm = store.reports.hourly_heatmap;
+                const hm = currentReports.value.hourly_heatmap;
                 const d = hm && hm.data;
                 return (d && d.max) ? d.max : 0;
             });
             const hours = computed(function () {
-                const hm = store.reports.hourly_heatmap;
+                const hm = currentReports.value.hourly_heatmap;
                 const d = hm && hm.data;
                 return (d && Array.isArray(d.hour_names)) ? d.hour_names : [];
             });
             const dayNames = computed(function () {
-                const hm = store.reports.hourly_heatmap;
+                const hm = currentReports.value.hourly_heatmap;
                 const d = hm && hm.data;
                 return (d && Array.isArray(d.day_names)) ? d.day_names : [];
             });
-            const hasData = computed(function () { return grid.value.length > 0 && max.value > 0; });
+            const hasData = computed(function () {
+                return grid.value.length > 0 && max.value > 0;
+            });
             function cellStyle(val) {
                 if (max.value === 0) return { background: '#f3e8e0' };
-                const intensity = val / max.value;
-                const alpha = 0.08 + intensity * 0.75;
-                return { background: 'rgba(111,78,55,' + alpha.toFixed(3) + ')' };
+                var i = val / max.value;
+                return { background: 'rgba(111,78,55,' + (0.08 + i * 0.75).toFixed(3) + ')' };
             }
             function cellTitle(dayIdx, hrIdx, val) {
-                const day = dayNames.value[dayIdx] || '';
-                const hour = hours.value[hrIdx] || '';
+                var day = dayNames.value[dayIdx] || '';
+                var hour = hours.value[hrIdx] || '';
                 return day + ' ' + hour + ':00 - ' + val + ' orders';
             }
-            return { store, title, grid, hours, dayNames, hasData, cellStyle, cellTitle };
+            return {
+                store: store, title: title, grid: grid, hours: hours, dayNames: dayNames,
+                hasData: hasData, cellStyle: cellStyle, cellTitle: cellTitle,
+            };
         }
     };
 
-    const LeastItemsTable = {
-        components: { AiExplainButton, AiSummaryCard },
-        template: `
-            <div class="report-card">
-                <div class="report-title-row">
-                    <h3 class="report-title"><i class="fas fa-snowflake"></i> {{ title }}</h3>
-                    <AiExplainButton reportKey="least_items"></AiExplainButton>
-                </div>
-                <div v-if="hasData" class="table-wrap">
-                    <table class="report-table">
-                        <thead>
-                            <tr><th>Item</th><th class="num">Sold</th><th class="num">Revenue (T)</th></tr>
-                        </thead>
-                        <tbody>
-                            <tr v-for="item in items" :key="item.id">
-                                <td>{{ item.name }}</td>
-                                <td class="num">{{ item.qty }}</td>
-                                <td class="num">{{ formatNumber(item.revenue) }}</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div v-else class="empty-state"><i class="fas fa-inbox"></i> No data in this range.</div>
-                <AiSummaryCard reportKey="least_items"></AiSummaryCard>
-            </div>
-        `,
-        setup() {
-            const items = computed(function () {
-                const li = store.reports.least_items;
-                const d = li && li.data;
-                return (d && Array.isArray(d.items)) ? d.items : [];
-            });
-            const hasData = computed(function () { return items.value.length > 0; });
-            const title = computed(function () {
-                const li = store.reports.least_items;
-                return (li && li.title) ? li.title : 'Least-Selling Items';
-            });
-            return { store, title, items, hasData, formatNumber };
-        }
-    };
-
-    const RisingItemsTable = {
-        components: { AiExplainButton, AiSummaryCard },
-        template: `
-            <div class="report-card">
-                <div class="report-title-row">
-                    <h3 class="report-title"><i class="fas fa-arrow-trend-up"></i> {{ title }}</h3>
-                    <AiExplainButton reportKey="rising_items"></AiExplainButton>
-                </div>
-                <div v-if="hasData" class="table-wrap">
-                    <table class="report-table">
-                        <thead>
-                            <tr>
-                                <th>Item</th>
-                                <th class="num">Before</th>
-                                <th class="num">After</th>
-                                <th class="num">Change</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-for="item in items" :key="item.id">
-                                <td>{{ item.name }}</td>
-                                <td class="num">{{ item.before }}</td>
-                                <td class="num">{{ item.after }}</td>
-                                <td class="num">
-                                    <span class="trend-pill up">
-                                        <i class="fas fa-arrow-up"></i>+{{ item.change_pct }}%
-                                    </span>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div v-else class="empty-state"><i class="fas fa-inbox"></i> Nothing is rising notably.</div>
-                <AiSummaryCard reportKey="rising_items"></AiSummaryCard>
-            </div>
-        `,
-        setup() {
-            const title = computed(function () {
-                const r = store.reports.rising_items;
-                return (r && r.title) ? r.title : 'Rising Items';
-            });
-            const items = computed(function () {
-                const r = store.reports.rising_items;
-                const d = r && r.data;
-                return (d && Array.isArray(d.items)) ? d.items : [];
-            });
-            const hasData = computed(function () { return items.value.length > 0; });
-            return { store, title, items, hasData };
-        }
-    };
+    // ---- Phase 3.2 reports ----
 
     const ItemCombosTable = {
-        components: { AiExplainButton, AiSummaryCard },
+        components: { AiExplainButton: AiExplainButton, AiSummaryCard: AiSummaryCard },
         template: `
             <div class="report-card">
                 <div class="report-title-row">
@@ -696,22 +1022,24 @@ function startAnalyticsApp() {
             </div>
         `,
         setup() {
-            const title = computed(function () {
-                const c = store.reports.item_combos;
-                return (c && c.title) ? c.title : 'Frequently Bought Together';
-            });
             const combos = computed(function () {
-                const c = store.reports.item_combos;
+                const c = currentReports.value.item_combos;
                 const d = c && c.data;
                 return (d && Array.isArray(d.combos)) ? d.combos : [];
             });
-            const hasData = computed(function () { return combos.value.length > 0; });
-            return { store, title, combos, hasData };
+            const title = computed(function () {
+                const c = currentReports.value.item_combos;
+                return (c && c.title) ? c.title : 'Frequently Bought Together';
+            });
+            return {
+                store: store, title: title, combos: combos,
+                hasData: computed(function () { return combos.value.length > 0; }),
+            };
         }
     };
 
     const FadingItemsTable = {
-        components: { AiExplainButton, AiSummaryCard },
+        components: { AiExplainButton: AiExplainButton, AiSummaryCard: AiSummaryCard },
         template: `
             <div class="report-card">
                 <div class="report-title-row">
@@ -742,33 +1070,134 @@ function startAnalyticsApp() {
                         </tbody>
                     </table>
                 </div>
-                <div v-else class="empty-state"><i class="fas fa-inbox"></i> Nothing is fading notably.</div>
+                <div v-else class="empty-state empty-state-explained">
+                    <i class="fas fa-circle-info"></i>
+                    <span v-html="explanation"></span>
+                </div>
                 <AiSummaryCard reportKey="fading_items"></AiSummaryCard>
             </div>
         `,
         setup() {
-            const title = computed(function () {
-                const f = store.reports.fading_items;
-                return (f && f.title) ? f.title : 'Fading Items';
-            });
             const items = computed(function () {
-                const f = store.reports.fading_items;
+                const f = currentReports.value.fading_items;
                 const d = f && f.data;
                 return (d && Array.isArray(d.items)) ? d.items : [];
             });
-            const hasData = computed(function () { return items.value.length > 0; });
-            return { store, title, items, hasData };
+            const explanation = computed(function () {
+                const f = currentReports.value.fading_items;
+                const d = f && f.data;
+                const reason = d && d.reason;
+                const split = (d && d.period_split) ? JalaliUtil.long(d.period_split) : 'the midpoint';
+                if (reason === 'no_before_data') {
+                    return 'No items are fading.<br><small>Fading requires sales in both halves of the range. Your first half (before ' + split + ') has no orders.</small>';
+                }
+                if (reason === 'no_after_data') {
+                    return 'No items are fading.<br><small>The second half (after ' + split + ') has no orders.</small>';
+                }
+                if (reason === 'no_orders_in_range') {
+                    return 'No items are fading.<br><small>No orders exist in this range.</small>';
+                }
+                return 'No items crossed the fading threshold.<br><small>Comparing before vs after ' + split + '.</small>';
+            });
+            const title = computed(function () {
+                const f = currentReports.value.fading_items;
+                return (f && f.title) ? f.title : 'Fading Items';
+            });
+            return {
+                store: store, title: title, items: items,
+                hasData: computed(function () { return items.value.length > 0; }),
+                explanation: explanation,
+            };
+        }
+    };
+
+    const RisingItemsTable = {
+        components: { AiExplainButton: AiExplainButton, AiSummaryCard: AiSummaryCard },
+        template: `
+            <div class="report-card">
+                <div class="report-title-row">
+                    <h3 class="report-title"><i class="fas fa-arrow-trend-up"></i> {{ title }}</h3>
+                    <AiExplainButton reportKey="rising_items"></AiExplainButton>
+                </div>
+                <div v-if="hasData" class="table-wrap">
+                    <table class="report-table">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th class="num">Before</th>
+                                <th class="num">After</th>
+                                <th class="num">Change</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="item in items" :key="item.id">
+                                <td>{{ item.name }}</td>
+                                <td class="num">{{ item.before }}</td>
+                                <td class="num">{{ item.after }}</td>
+                                <td class="num">
+                                    <span class="trend-pill up">
+                                        <i class="fas fa-arrow-up"></i>+{{ item.change_pct }}%
+                                    </span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div v-else class="empty-state empty-state-explained">
+                    <i class="fas fa-circle-info"></i>
+                    <span v-html="explanation"></span>
+                </div>
+                <AiSummaryCard reportKey="rising_items"></AiSummaryCard>
+            </div>
+        `,
+        setup() {
+            const items = computed(function () {
+                const r = currentReports.value.rising_items;
+                const d = r && r.data;
+                return (d && Array.isArray(d.items)) ? d.items : [];
+            });
+            const explanation = computed(function () {
+                const r = currentReports.value.rising_items;
+                const d = r && r.data;
+                const reason = d && d.reason;
+                const split = (d && d.period_split) ? JalaliUtil.long(d.period_split) : 'the midpoint';
+                if (reason === 'no_before_data') {
+                    return 'No items are rising notably.<br><small>Rising requires sales in both halves of the range. Your first half (before ' + split + ') has no orders.</small>';
+                }
+                if (reason === 'no_after_data') {
+                    return 'No items are rising notably.<br><small>The second half (after ' + split + ') has no orders.</small>';
+                }
+                if (reason === 'no_orders_in_range') {
+                    return 'No items are rising notably.<br><small>No orders exist in this range.</small>';
+                }
+                return 'No items crossed the rising threshold.<br><small>Comparing before vs after ' + split + '.</small>';
+            });
+            const title = computed(function () {
+                const r = currentReports.value.rising_items;
+                return (r && r.title) ? r.title : 'Rising Items';
+            });
+            return {
+                store: store, title: title, items: items,
+                hasData: computed(function () { return items.value.length > 0; }),
+                explanation: explanation,
+            };
         }
     };
 
     const PriceTierShiftGrid = {
-        components: { AiExplainButton, AiSummaryCard },
+        components: { AiExplainButton: AiExplainButton, AiSummaryCard: AiSummaryCard },
         template: `
             <div class="report-card report-card-wide">
                 <div class="report-title-row">
                     <h3 class="report-title"><i class="fas fa-layer-group"></i> {{ title }}</h3>
                     <AiExplainButton reportKey="price_tier_shift"></AiExplainButton>
                 </div>
+
+                <p v-if="splitLabel && hasData" class="tier-subtitle">
+                    Comparing <strong>before</strong> vs <strong>after {{ splitLabel }}</strong>
+                    - how customers' price preferences shifted across the range.
+                </p>
+
                 <div v-if="hasData" class="tier-grid">
                     <div v-for="tier in tiers" :key="tier.key" class="tier-card">
                         <div class="tier-header">
@@ -776,63 +1205,85 @@ function startAnalyticsApp() {
                             <span>{{ tier.name }}</span>
                         </div>
                         <div class="tier-range">{{ tier.range }}</div>
+
+                        <div class="tier-bar">
+                            <div class="tier-bar-label">Share of units (after)</div>
+                            <div class="tier-bar-track">
+                                <div class="tier-bar-fill" :style="{ width: tier.share_after + '%' }"></div>
+                            </div>
+                            <div class="tier-bar-value">
+                                {{ tier.share_after }}%
+                                <span v-if="tier.share_delta !== 0"
+                                      class="tier-bar-delta"
+                                      :class="tier.share_delta > 0 ? 'up' : 'down'">
+                                    ({{ tier.share_delta > 0 ? '+' : '' }}{{ tier.share_delta }}%)
+                                </span>
+                            </div>
+                        </div>
+
                         <div class="tier-stat">
-                            <span class="tier-label">Before</span>
-                            <span class="tier-value">{{ tier.qty_before }} <small>units</small></span>
+                            <span class="tier-label">Units sold</span>
+                            <span class="tier-value">{{ tier.qty_before }} <small>-></small> {{ tier.qty_after }}</span>
                         </div>
                         <div class="tier-stat">
-                            <span class="tier-label">After</span>
-                            <span class="tier-value">{{ tier.qty_after }} <small>units</small></span>
-                        </div>
-                        <div class="tier-stat" v-if="tier.change_pct !== null">
-                            <span class="tier-label">Change</span>
-                            <span class="trend-pill" :class="tier.change_pct >= 0 ? 'up' : 'down'">
-                                <i :class="tier.change_pct >= 0 ? 'fas fa-arrow-up' : 'fas fa-arrow-down'"></i>
-                                {{ tier.change_pct > 0 ? '+' : '' }}{{ tier.change_pct }}%
-                            </span>
+                            <span class="tier-label">Revenue</span>
+                            <span class="tier-value">{{ formatNumber(tier.rev_before) }} <small>-></small> {{ formatNumber(tier.rev_after) }} <small>T</small></span>
                         </div>
                     </div>
                 </div>
-                <div v-else class="empty-state"><i class="fas fa-inbox"></i> No price tiers to display.</div>
+
+                <div v-else class="empty-state empty-state-explained">
+                    <i class="fas fa-circle-info"></i>
+                    <span v-html="explanation"></span>
+                </div>
+
                 <AiSummaryCard reportKey="price_tier_shift"></AiSummaryCard>
             </div>
         `,
         setup() {
-            const title = computed(function () {
-                const p = store.reports.price_tier_shift;
-                return (p && p.title) ? p.title : 'Price Tier Shift';
-            });
             const tiers = computed(function () {
-                const p = store.reports.price_tier_shift;
+                const p = currentReports.value.price_tier_shift;
                 const d = p && p.data;
                 return (d && Array.isArray(d.tiers)) ? d.tiers : [];
             });
-            const hasData = computed(function () { return tiers.value.length > 0; });
-            return { store, title, tiers, hasData };
+            const splitLabel = computed(function () {
+                const p = currentReports.value.price_tier_shift;
+                const d = p && p.data;
+                return (d && d.period_split) ? JalaliUtil.long(d.period_split) : '';
+            });
+            const explanation = computed(function () {
+                const p = currentReports.value.price_tier_shift;
+                const d = p && p.data;
+                const reason = d && d.reason;
+                if (reason === 'no_before_data') {
+                    return 'Not enough data yet.<br><small>The first half of the selected range has no orders, so there is nothing to compare against.</small>';
+                }
+                if (reason === 'no_after_data') {
+                    return 'Not enough data yet.<br><small>The second half of the selected range has no orders.</small>';
+                }
+                return 'No price tiers to display.<br><small>Add a few items to the menu and place some orders.</small>';
+            });
+            const title = computed(function () {
+                const p = currentReports.value.price_tier_shift;
+                return (p && p.title) ? p.title : 'Price Tier Shift';
+            });
+            return {
+                store: store, formatNumber: formatNumber, title: title,
+                tiers: tiers, splitLabel: splitLabel, explanation: explanation,
+                hasData: computed(function () { return tiers.value.length > 0; }),
+            };
         }
     };
 
-    // ---- Root app ----
-    // Layout order (fixed to avoid orphan rows):
-    //   Row 1: Summary (full width)
-    //   Row 2: Revenue Trend | Top Items
-    //   Row 3: Orders by Hour (full width - needs horizontal room)
-    //   Row 4: Least Items | Rising Items
-    //   Row 5: Item Combos | Fading Items
-    //   Row 6: Price Tier Shift (full width - three tier cards)
+    // ---- Root ----
 
     const AnalyticsApp = {
         components: {
-            Toolbar,
-            SummaryCard,
-            RevenueChart,
-            TopItemsChart,
-            HeatmapGrid,
-            LeastItemsTable,
-            RisingItemsTable,
-            ItemCombosTable,
-            FadingItemsTable,
-            PriceTierShiftGrid,
+            Toolbar: Toolbar, SummaryCard: SummaryCard,
+            RevenueChart: RevenueChart, TopItemsChart: TopItemsChart, HeatmapGrid: HeatmapGrid,
+            LeastItemsTable: LeastItemsTable, RisingItemsTable: RisingItemsTable,
+            ItemCombosTable: ItemCombosTable, FadingItemsTable: FadingItemsTable,
+            PriceTierShiftGrid: PriceTierShiftGrid,
         },
         template: `
             <div>
@@ -863,14 +1314,11 @@ function startAnalyticsApp() {
                 </div>
             </div>
         `,
-        setup() { return { store }; }
+        setup() { return { store: store }; }
     };
 
     const mountEl = document.getElementById('vue-analytics-root');
-    if (!mountEl) {
-        console.error('[analytics-vue] #vue-analytics-root not found');
-        return;
-    }
+    if (!mountEl) { console.error('[analytics-vue] #vue-analytics-root not found'); return; }
 
     try {
         createApp(AnalyticsApp).mount('#vue-analytics-root');
@@ -882,14 +1330,14 @@ function startAnalyticsApp() {
 
     renderAllCharts();
 
-    let lastReportVersion = JSON.stringify(store.reports);
+    let lastVersion = JSON.stringify(currentReports.value);
     setInterval(function () {
-        const v = JSON.stringify(store.reports);
-        if (v !== lastReportVersion) {
-            lastReportVersion = v;
+        var v = JSON.stringify(currentReports.value);
+        if (v !== lastVersion) {
+            lastVersion = v;
             renderAllCharts();
         }
-    }, 500);
+    }, 300);
 }
 
 if (document.readyState === 'loading') {

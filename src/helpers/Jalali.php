@@ -137,4 +137,36 @@ class Jalali
         $year = $shortYear ? substr($jYear, -2) : $jYear;
         return sprintf("%04d/%02d/%02d", $year, $jMonth, $jDay);
     }
+     /**
+     * Convert an ISO date string "2026-09-24" to Jalali parts.
+     * Returns [jy, jm, jd] or null if the input is malformed.
+     */
+    public static function fromIso($iso) {
+        if (!$iso || !preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $iso, $m)) return null;
+        return self::gregorianToJalali((int)$m[1], (int)$m[2], (int)$m[3]);
+    }
+
+    /**
+     * Convert an ISO date string to a human Jalali format.
+     * "2026-09-24" -> "2 Mehr 1405"
+     */
+    public static function formatHuman($iso) {
+        $j = self::fromIso($iso);
+        if (!$j) return $iso;
+        $months = ['Farvardin','Ordibehesht','Khordad','Tir','Mordad','Shahrivar',
+                   'Mehr','Aban','Azar','Dey','Bahman','Esfand'];
+        return $j[2] . ' ' . $months[$j[1] - 1] . ' ' . $j[0];
+    }
+
+    /**
+     * Convert an ISO date string to a numeric Jalali format.
+     * "2026-09-24" -> "1405/07/02"
+     */
+    public static function formatNumeric($iso) {
+        $j = self::fromIso($iso);
+        if (!$j) return $iso;
+        return sprintf('%04d/%02d/%02d', $j[0], $j[1], $j[2]);
+    }
+
 }
+

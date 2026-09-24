@@ -3,8 +3,8 @@
 // =============================================================
 // Reads and writes the analytics_cache table.
 //
-// Key = report_key + date_start + date_end. The unique key on the
-// table means we only ever have one row per report per range.
+// Key = report_key + date_start + date_end. The unique key on
+// the table means we only ever have one row per report per range.
 //
 // Entries older than $maxAgeMinutes are considered stale and
 // recomputed. Default: 60 minutes.
@@ -58,8 +58,22 @@ class AnalyticsCache
     }
 
     /**
-     * Wipe every cached report. Called manually when the underlying
-     * data changed and you want to force regeneration.
+     * Clear SQL rows (no __ai suffix) or AI rows (with __ai suffix)
+     * for a specific date range.
+     */
+    public function clearRange(string $dateStart, string $dateEnd, bool $aiOnly): int
+    {
+        $op = $aiOnly ? 'LIKE' : 'NOT LIKE';
+        $stmt = $this->pdo->prepare("
+            DELETE FROM analytics_cache
+            WHERE date_start = ? AND date_end = ? AND report_key {$op} '%\_\_ai'
+        ");
+        $stmt->execute([$dateStart, $dateEnd]);
+        return $stmt->rowCount();
+    }
+
+    /**
+     * Wipe every cached report.
      */
     public function clearAll(): int
     {

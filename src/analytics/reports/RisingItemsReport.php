@@ -1,8 +1,8 @@
 <?php
 // src/analytics/reports/RisingItemsReport.php
 // =============================================================
-// The inverse of FadingItemsReport. Items whose sales grew
-// significantly in the second half of the range.
+// Items whose sales grew significantly in the second half of the
+// range compared to the first half.
 
 require_once __DIR__ . '/ReportBase.php';
 
@@ -12,7 +12,7 @@ class RisingItemsReport extends ReportBase
     public function getTitle(): string { return 'Rising Items'; }
 
     private const GROWTH_THRESHOLD = 0.40;   // 40% growth
-    private const MIN_BEFORE_QTY   = 2;      // must have existed before
+    private const MIN_BEFORE_QTY   = 1;      // at least 1 sale before
     private const LIMIT            = 10;
 
     public function run(PDO $pdo, string $dateStart, string $dateEnd): array
@@ -30,43 +30,60 @@ class RisingItemsReport extends ReportBase
             ? $this->loadOrdersInRange($pdo, $afterStart, $dateEnd)
             : [];
 
-        $tally = [];
-        foreach ($beforeOrders as $o) {
-            foreach ($this->decodeItems($o['items']) as $id => $qty) {
-                if (!isset($tally[$id])) $tally[$id] = ['before' => 0, 'after' => 0];
-                $tally[$id]['before'] += $qty;
-            }
-        }
-        foreach ($afterOrders as $o) {
-            foreach ($this->decodeItems($o['items']) as $id => $qty) {
-                if (!isset($tally[$id])) $tally[$id] = ['before' => 0, 'after' => 0];
-                $tally[$id]['after'] += $qty;
-            }
+        // Reason for empty state.
+        $reason = null;
+        if (empty($beforeOrders) && empty($afterOrders)) {
+            $reason = 'no_orders_in_range';
+        } elseif (empty($beforeOrders)) {
+            $reason = 'no_before_data';
+        } elseif (empty($afterOrders)) {
+            $reason = 'no_after_data';
         }
 
         $rows = [];
-        foreach ($tally as $id => $t) {
-            if ($t['before'] < self::MIN_BEFORE_QTY) continue;
-            $change = (($t['after'] - $t['before']) / $t['before']);
-            if ($change < self::GROWTH_THRESHOLD) continue;
-            $rows[] = [
-                'id'         => (int) $id,
-                'name'       => $menu[$id]['name'] ?? "Unknown (#$id)",
-                'before'     => (int) $t['before'],
-                'after'      => (int) $t['after'],
-                'change_pct' => (int) round($change * 100),
-            ];
-        }
 
-        // Biggest growth first.
-        usort($rows, function ($a, $b) { return $b['change_pct'] - $a['change_pct']; });
-        $rows = array_slice($rows, 0, self::LIMIT);
+        if ($reason === null) {
+            $tally = [];
+            foreach ($beforeOrders as $o) {
+                foreach ($this->decodeItems($o['items']) as $id => $qty) {
+                    if (!isset($tally[$id])) $tally[$id] = ['before' => 0, 'after' => 0];
+                    $tally[$id]['before'] += $qty;
+                }
+            }
+            foreach ($afterOrders as $o) {
+                foreach ($this->decodeItems($o['items']) as $id => $qty) {
+                    if (!isset($tally[$id])) $tally[$id] = ['before' => 0, 'after' => 0];
+                    $tally[$id]['after'] += $qty;
+                }
+            }
+
+            foreach ($tally as $id => $t) {
+                if ($t['before'] < self::MIN_BEFORE_QTY) continue;
+                $change = (($t['after'] - $t['before']) / $t['before']);
+                if ($change < self::GROWTH_THRESHOLD) continue;
+                $rows[] = [
+                    'id'         => (int) $id,
+                    'name'       => $menu[$id]['name'] ?? "Unknown (#$id)",
+                    'before'     => (int) $t['before'],
+                    'after'      => (int) $t['after'],
+                    'change_pct' => (int) round($change * 100),
+                ];
+            }
+
+            usort($rows, function ($a, $b) { return $b['change_pct'] - $a['change_pct']; });
+            $rows = array_slice($rows, 0, self::LIMIT);
+
+            if (empty($rows)) {
+                $reason = 'no_significant_change';
+            }
+        }
 
         return [
             'items'         => $rows,
             'period_split'  => $midDate,
             'threshold_pct' => (int) (self::GROWTH_THRESHOLD * 100),
             'min_before'    => self::MIN_BEFORE_QTY,
+            'reason'        => $reason,
         ];
     }
 }

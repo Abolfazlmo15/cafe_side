@@ -3,16 +3,18 @@
 // =============================================================
 // Orchestrator. Registers every report, runs them, caches results.
 //
-// Usage from analytics.php:
-//   $engine = new AnalyticsEngine($pdo);
-//   $all = $engine->runAll('2026-08-01', '2026-09-01');
-//   // => ['revenue_trend' => ['title' => ..., 'data' => [...]], ...]
+// Phase 3.2 + AI-curation support:
+//   8 SQL reports + helpers to read cached AI data.
 
 require_once __DIR__ . '/AnalyticsCache.php';
 require_once __DIR__ . '/reports/RevenueTrendReport.php';
 require_once __DIR__ . '/reports/TopItemsReport.php';
 require_once __DIR__ . '/reports/LeastItemsReport.php';
 require_once __DIR__ . '/reports/HourlyHeatmapReport.php';
+require_once __DIR__ . '/reports/ItemCombosReport.php';
+require_once __DIR__ . '/reports/FadingItemsReport.php';
+require_once __DIR__ . '/reports/RisingItemsReport.php';
+require_once __DIR__ . '/reports/PriceTierShiftReport.php';
 
 class AnalyticsEngine
 {
@@ -22,7 +24,7 @@ class AnalyticsEngine
 
     public function __construct(PDO $pdo)
     {
-        $this->pdo = $pdo;
+        $this->pdo   = $pdo;
         $this->cache = new AnalyticsCache($pdo);
 
         $this->reports = [
@@ -30,13 +32,13 @@ class AnalyticsEngine
             new TopItemsReport(),
             new LeastItemsReport(),
             new HourlyHeatmapReport(),
+            new ItemCombosReport(),
+            new FadingItemsReport(),
+            new RisingItemsReport(),
+            new PriceTierShiftReport(),
         ];
     }
 
-    /**
-     * Every registered report — used by the analytics page to build
-     * the layout dynamically.
-     */
     public function getReports(): array
     {
         return $this->reports;
@@ -83,8 +85,27 @@ class AnalyticsEngine
     }
 
     /**
-     * Invalidate the entire cache. Called when the admin clicks
-     * "Refresh" on the analytics page.
+     * Read a cached AI-curated report (stored under __ai suffix).
+     * Uses a long max age (7 days) so it doesn't expire quickly.
+     */
+    public function getCachedAiReport(string $key, string $dateStart, string $dateEnd): ?array
+    {
+        $aiKey = $key . '__ai';
+        return $this->cache->get($aiKey, $dateStart, $dateEnd, 10080); // 7 days
+    }
+
+    /**
+     * Clear cache for a date range.
+     *   $aiOnly = true  -> clears ONLY the __ai entries
+     *   $aiOnly = false -> clears ONLY the SQL entries
+     */
+    public function clearCacheRange(string $dateStart, string $dateEnd, bool $aiOnly): int
+    {
+        return $this->cache->clearRange($dateStart, $dateEnd, $aiOnly);
+    }
+
+    /**
+     * Wipe everything. Rarely used.
      */
     public function clearCache(): int
     {
