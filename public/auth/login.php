@@ -10,8 +10,7 @@ if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true
     exit;
 }
 
-require_once __DIR__ . '/../../src/database.php';
-require_once __DIR__ . '/../../src/urls.php';
+require_once __DIR__ . '/../../bootstrap.php';
 
 $pdo = getDbConnection();
 

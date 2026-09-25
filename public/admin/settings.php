@@ -2,10 +2,8 @@
 // public/admin/settings.php – Admin settings management
 // ======================================================
 
-require_once __DIR__ . '/../../src/auth.php';
-require_once __DIR__ . '/../../src/database.php';
-require_once __DIR__ . '/../../src/urls.php';
-require_once __DIR__ . '/../../src/layout/AdminLayout.php';
+require_once __DIR__ . '/../../bootstrap.php';
+require_once SRC_PATH . '/auth.php';
 
 $pdo = getDbConnection();
 

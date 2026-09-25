@@ -2,7 +2,7 @@
 // public/auth/logout.php – Destroy session and redirect to login
 // =================================================================
 
-require_once __DIR__ . '/../../src/urls.php';
+require_once __DIR__ . '/../../bootstrap.php';
 
 session_start();
 session_destroy();

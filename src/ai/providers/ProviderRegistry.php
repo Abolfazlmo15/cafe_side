@@ -1,15 +1,14 @@
 <?php
 // src/ai/providers/ProviderRegistry.php
 // =============================================================
-// The single entry point for AI calls.
+// Single entry point for AI calls.
 //
-// Loads every provider class, instantiates the ones that are
-// configured, orders them by the priority list from settings, and
-// exposes chat() that walks the chain.
-//
-// On any provider failure (except rate-limit), the failing provider
-// is added to the blacklist for a TTL. The registry skips
-// blacklisted providers on the next call.
+// Hardened in Phase 13.5:
+//   - Panic mode: if no non-blacklisted providers exist, retry the
+//     least-recently-failed one. This breaks the deadlock where
+//     rapid retries keep extending blacklists past the TTL.
+//   - Uses classification-aware markFailed() from AIBlacklist.
+//   - Exposes getStatusReport() with blacklist details for diagnostics.
 
 require_once __DIR__ . '/ProviderBase.php';
 require_once __DIR__ . '/OpenRouterProvider.php';
@@ -26,25 +25,19 @@ class ProviderRegistry
     private PDO $pdo;
     private AIBlacklist $blacklist;
     private AIModelCache $cache;
-    private array $providers = [];    // name => ProviderBase
-    private array $order = [];        // priority order after blacklist filter
+    private array $providers = [];
+    private array $order = [];
 
     public function __construct(PDO $pdo)
     {
-        $this->pdo = $pdo;
+        $this->pdo       = $pdo;
         $this->blacklist = new AIBlacklist($pdo);
         $this->cache     = new AIModelCache($pdo);
 
-        // Opportunistic cleanup — cheap and keeps the tables tidy.
         $this->blacklist->pruneExpired();
-
         $this->buildProviders();
         $this->order = $this->resolveOrder();
     }
-
-    // ─────────────────────────────────────────────────────────
-    // Provider instantiation
-    // ─────────────────────────────────────────────────────────
 
     private function buildProviders(): void
     {
@@ -57,7 +50,7 @@ class ProviderRegistry
             'huggingface' => ['api_key' => env('HUGGINGFACE_TOKEN', '')],
         ];
 
-        $instances = [
+        $this->providers = [
             'openrouter'  => new OpenRouterProvider($configs['openrouter']),
             'groq'        => new GroqProvider($configs['groq']),
             'deepseek'    => new DeepSeekProvider($configs['deepseek']),
@@ -65,20 +58,8 @@ class ProviderRegistry
             'together'    => new TogetherProvider($configs['together']),
             'huggingface' => new HuggingFaceProvider($configs['huggingface']),
         ];
-
-        foreach ($instances as $name => $provider) {
-            $this->providers[$name] = $provider;
-        }
     }
 
-    // ─────────────────────────────────────────────────────────
-    // Priority resolution
-    // ─────────────────────────────────────────────────────────
-
-    /**
-     * Reads ai_provider_priority from settings, filters to configured
-     * and non-blacklisted providers, returns ordered names.
-     */
     private function resolveOrder(): array
     {
         $priority = $this->readPrioritySetting();
@@ -92,9 +73,6 @@ class ProviderRegistry
             $ordered[] = $name;
         }
 
-        // Append any configured provider not already in the list —
-        // catches new providers you add to .env without touching the
-        // settings table.
         foreach ($this->providers as $name => $p) {
             if (in_array($name, $ordered, true)) continue;
             if (!$p->isConfigured()) continue;
@@ -110,43 +88,56 @@ class ProviderRegistry
         try {
             $stmt = $this->pdo->prepare("SELECT setting_value FROM settings WHERE setting_key = 'ai_provider_priority'");
             $stmt->execute();
-            $val = (string) ($stmt->fetchColumn() ?: 'openrouter');
+            $val = (string) ($stmt->fetchColumn() ?: 'openrouter,groq,deepseek,mistral,together,huggingface');
         } catch (PDOException $e) {
-            $val = 'openrouter';
+            $val = 'openrouter,groq,deepseek,mistral,together,huggingface';
         }
-
         return array_values(array_filter(array_map('trim', explode(',', $val))));
     }
 
-    // ─────────────────────────────────────────────────────────
-    // Public API
-    // ─────────────────────────────────────────────────────────
-
     /**
-     * Walk the priority chain. Returns the first successful response
-     * in the same shape every provider returns.
+     * Called when $this->order is empty — pick the provider whose
+     * blacklist entry expires soonest. It's the least-bad option.
      */
+    private function pickLeastBadProvider(): ?string
+    {
+        $candidates = [];
+        foreach ($this->providers as $name => $p) {
+            if (!$p->isConfigured()) continue;
+            $entry = $this->blacklist->getCurrent($name);
+            if (!$entry) {
+                // Not blacklisted but somehow not in order — use it.
+                return $name;
+            }
+            $candidates[$name] = strtotime($entry['expires_at']);
+        }
+        if (empty($candidates)) return null;
+        asort($candidates);
+        return array_key_first($candidates);
+    }
+
     public function chat(array $messages, array $options = []): array
     {
-        if (empty($this->order)) {
-            return [
-                'ok'         => false,
-                'text'       => '',
-                'model'      => null,
-                'provider'   => null,
-                'tokens_in'  => 0,
-                'tokens_out' => 0,
-                'latency_ms' => 0,
-                'error'      => 'No configured providers available',
-            ];
+        $chain = $this->order;
+
+        // Panic mode — break the deadlock.
+        if (empty($chain)) {
+            $fallback = $this->pickLeastBadProvider();
+            if ($fallback === null) {
+                return [
+                    'ok' => false, 'text' => '', 'model' => null, 'provider' => null,
+                    'tokens_in' => 0, 'tokens_out' => 0, 'latency_ms' => 0,
+                    'error' => 'No AI providers are configured. Check .env keys on the server.',
+                ];
+            }
+            $chain = [$fallback];
         }
 
         $errors = [];
 
-        foreach ($this->order as $name) {
+        foreach ($chain as $name) {
             $provider = $this->providers[$name];
 
-            // Use the cached default model if the caller didn't pin one.
             $model = $options['model'] ?? null;
             if ($model === null) {
                 $model = $this->cache->pickDefaultModel($name);
@@ -155,63 +146,43 @@ class ProviderRegistry
             $result = $provider->chat($messages, $model, $options);
 
             if (!empty($result['ok'])) {
+                // Success clears the blacklist for this provider.
+                $this->blacklist->clearProvider($name);
                 return $result;
             }
 
-            $errMsg = (string) ($result['error'] ?? 'Unknown');
+            $errMsg = (string) ($result['error'] ?? 'Unknown failure');
             $errors[] = $name . ': ' . $errMsg;
 
-            // Blacklist unless it's a rate-limit error.
-            $lower = strtolower($errMsg);
-            if (strpos($lower, '429') === false && strpos($lower, 'rate') === false) {
-                $this->blacklist->markFailed($name, $errMsg, 15);
-            }
+            // Classification-aware blacklisting (handled inside markFailed).
+            $this->blacklist->markFailed($name, $errMsg);
         }
 
         return [
-            'ok'         => false,
-            'text'       => '',
-            'model'      => null,
-            'provider'   => null,
-            'tokens_in'  => 0,
-            'tokens_out' => 0,
-            'latency_ms' => 0,
-            'error'      => 'All providers failed — ' . implode(' | ', $errors),
+            'ok' => false, 'text' => '', 'model' => null, 'provider' => null,
+            'tokens_in' => 0, 'tokens_out' => 0, 'latency_ms' => 0,
+            'error' => 'All providers failed — ' . implode(' | ', $errors),
         ];
     }
 
-    /**
-     * Names in priority order after blacklist filtering.
-     */
-    public function getOrder(): array
-    {
-        return $this->order;
-    }
+    public function getOrder(): array { return $this->order; }
+    public function getAllProviders(): array { return $this->providers; }
+    public function getBlacklist(): AIBlacklist { return $this->blacklist; }
+    public function getModelCache(): AIModelCache { return $this->cache; }
 
-    /**
-     * Every instantiated provider (configured or not).
-     */
-    public function getAllProviders(): array
-    {
-        return $this->providers;
-    }
-
-    /**
-     * Detailed status per provider for the diagnostic.
-     */
     public function getStatusReport(): array
     {
         $out = [];
         foreach ($this->providers as $name => $p) {
+            $entry = $this->blacklist->getCurrent($name);
             $out[$name] = [
-                'configured' => $p->isConfigured(),
-                'blacklisted' => $this->blacklist->isBlacklisted($name),
+                'configured'        => $p->isConfigured(),
+                'blacklisted'       => $entry !== null,
+                'blacklist_reason'  => $entry['reason'] ?? null,
+                'blacklist_expires' => $entry['expires_at'] ?? null,
                 'in_priority_order' => in_array($name, $this->order, true),
             ];
         }
         return $out;
     }
-
-    public function getBlacklist(): AIBlacklist { return $this->blacklist; }
-    public function getModelCache(): AIModelCache { return $this->cache; }
 }

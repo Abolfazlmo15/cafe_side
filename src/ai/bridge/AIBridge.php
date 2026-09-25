@@ -1,18 +1,16 @@
 <?php
 // src/ai/bridge/AIBridge.php
 // =============================================================
-// Entry point for report narration AND AI-curated report data.
+// Entry point for report narration, AI-curated data, and the
+// weekly briefing.
 //
-//   explainReport()   -> prose narration of SQL data (short)
-//   executiveReview() -> prose review of the whole period (longer)
-//   processReport()   -> re-curated report data as JSON
-//
-// Narration is cached under the plain report key (ai_summary column).
-// AI-curated data is cached under `{reportKey}__ai` (data column).
+// Methods:
+//   explainReport()        -> prose narration of one report
+//   executiveReview()      -> prose review of the whole period
+//   processReport()        -> re-curated report data as JSON
+//   generateWeeklySummary() -> weekly briefing saved to memory
+//   clearSummary()         -> forget a cached narration
 
-require_once __DIR__ . '/../providers/ProviderRegistry.php';
-require_once __DIR__ . '/../prompts/PromptLibrary.php';
-require_once __DIR__ . '/../managers/AIRateLimiter.php';
 
 class AIBridge
 {
@@ -27,15 +25,27 @@ class AIBridge
         $this->rateLimiter = new AIRateLimiter($pdo);
     }
 
+    /**
+     * Narrate one report in 2-3 sentences.
+     */
     public function explainReport(
-        string $reportKey, array $reportData,
-        string $dateStart, string $dateEnd, bool $force = false
+        string $reportKey,
+        array $reportData,
+        string $dateStart,
+        string $dateEnd,
+        bool $force = false
     ): array {
         return $this->runNarration($reportKey, $reportData, $dateStart, $dateEnd, $force, 400, 0.4);
     }
 
+    /**
+     * Longer prose review of the period (3-5 sentences).
+     */
     public function executiveReview(
-        array $summaryData, string $dateStart, string $dateEnd, bool $force = false
+        array $summaryData,
+        string $dateStart,
+        string $dateEnd,
+        bool $force = false
     ): array {
         return $this->runNarration('executive_summary', $summaryData, $dateStart, $dateEnd, $force, 500, 0.5);
     }
@@ -45,8 +55,11 @@ class AIBridge
      * on success, or null on failure. Uses a __ai suffix cache key.
      */
     public function processReport(
-        string $reportKey, array $sqlData,
-        string $dateStart, string $dateEnd, bool $force = false
+        string $reportKey,
+        array $sqlData,
+        string $dateStart,
+        string $dateEnd,
+        bool $force = false
     ): ?array {
         $cacheKey = $reportKey . '__ai';
 
@@ -70,7 +83,7 @@ class AIBridge
         if (empty($result['ok'])) return null;
 
         $text = trim((string) $result['text']);
-        // Strip optional code fences that the AI sometimes adds.
+        // Strip optional code fences.
         $text = preg_replace('/^```(?:json)?\s*/i', '', $text);
         $text = preg_replace('/\s*```$/', '', $text);
 
@@ -81,6 +94,78 @@ class AIBridge
         return $parsed;
     }
 
+    /**
+     * Generate a weekly briefing and store it in report_memory.
+     *
+     * @param array $weekData          this week's summary
+     * @param array $previousSummaries recent briefings (newest first)
+     */
+    public function generateWeeklySummary(
+        array $weekData,
+        array $previousSummaries,
+        string $dateStart,
+        string $dateEnd,
+        bool $force = false
+    ): array {
+        $memory = new ReportMemory($this->pdo);
+
+        // Skip if we produced one in the last 20 hours (unless forced).
+        if (!$force && $memory->hasRecent('weekly_summary', 20)) {
+            return [
+                'ok'       => true,
+                'text'     => '',
+                'provider' => null,
+                'cached'   => true,
+                'skipped'  => 'recent',
+                'error'    => null,
+            ];
+        }
+
+        if (!$this->rateLimiter->allow()) {
+            return [
+                'ok'       => false,
+                'text'     => '',
+                'provider' => null,
+                'cached'   => false,
+                'skipped'  => null,
+                'error'    => 'Too many AI calls in the last hour. Try again shortly.',
+            ];
+        }
+
+        $messages = PromptLibrary::buildWeeklySummaryMessages(
+            $weekData, $previousSummaries, $dateStart, $dateEnd
+        );
+
+        $result = $this->registry->chat($messages, [
+            'max_tokens'  => 500,
+            'temperature' => 0.5,
+        ]);
+
+        $this->rateLimiter->log('weekly_summary', $result);
+
+        if (!empty($result['ok'])) {
+            $memory->save(
+                'weekly_summary',
+                (string) ($result['text'] ?? ''),
+                $result['provider'] ?? null,
+                $result['model'] ?? null
+            );
+            $memory->pruneOld('weekly_summary', 12);
+        }
+
+        return [
+            'ok'       => !empty($result['ok']),
+            'text'     => (string) ($result['text'] ?? ''),
+            'provider' => $result['provider'] ?? null,
+            'cached'   => false,
+            'skipped'  => null,
+            'error'    => $result['error'] ?? null,
+        ];
+    }
+
+    /**
+     * Clear a cached narration for a specific report + range.
+     */
     public function clearSummary(string $reportKey, string $dateStart, string $dateEnd): void
     {
         $stmt = $this->pdo->prepare("
@@ -92,13 +177,17 @@ class AIBridge
     }
 
     // ---------------------------------------------------------
-    // Narration path
+    // Narration path (shared by explainReport + executiveReview)
     // ---------------------------------------------------------
 
     private function runNarration(
-        string $promptKey, array $data,
-        string $dateStart, string $dateEnd,
-        bool $force, int $maxTokens, float $temperature
+        string $promptKey,
+        array $data,
+        string $dateStart,
+        string $dateEnd,
+        bool $force,
+        int $maxTokens,
+        float $temperature
     ): array {
         if (!$force) {
             $cached = $this->getCachedSummary($promptKey, $dateStart, $dateEnd);
@@ -108,27 +197,46 @@ class AIBridge
         }
 
         if (!$this->rateLimiter->allow()) {
-            return ['ok' => false, 'text' => '', 'provider' => null, 'cached' => false,
-                    'error' => 'Too many AI calls in the last hour. Try again shortly.'];
+            return [
+                'ok'       => false,
+                'text'     => '',
+                'provider' => null,
+                'cached'   => false,
+                'error'    => 'Too many AI calls in the last hour. Try again shortly.',
+            ];
         }
 
         $messages = PromptLibrary::buildMessages($promptKey, $data, $dateStart, $dateEnd);
         if ($messages === null) {
-            return ['ok' => false, 'text' => '', 'provider' => null, 'cached' => false,
-                    'error' => "No narration template for '" . $promptKey . "'."];
+            return [
+                'ok'       => false,
+                'text'     => '',
+                'provider' => null,
+                'cached'   => false,
+                'error'    => "No narration template for '" . $promptKey . "'.",
+            ];
         }
 
-        $result = $this->registry->chat($messages, ['max_tokens' => $maxTokens, 'temperature' => $temperature]);
+        $result = $this->registry->chat($messages, [
+            'max_tokens'  => $maxTokens,
+            'temperature' => $temperature,
+        ]);
+
         $this->rateLimiter->log($promptKey, $result);
 
         if (!empty($result['ok'])) {
-            $this->saveCachedSummary($promptKey, $dateStart, $dateEnd,
-                (string)($result['text'] ?? ''), $result['provider'] ?? null);
+            $this->saveCachedSummary(
+                $promptKey,
+                $dateStart,
+                $dateEnd,
+                (string) ($result['text'] ?? ''),
+                $result['provider'] ?? null
+            );
         }
 
         return [
             'ok'       => !empty($result['ok']),
-            'text'     => (string)($result['text'] ?? ''),
+            'text'     => (string) ($result['text'] ?? ''),
             'provider' => $result['provider'] ?? null,
             'cached'   => false,
             'error'    => $result['error'] ?? null,
@@ -151,12 +259,20 @@ class AIBridge
         return $row ? (string) $row['ai_summary'] : null;
     }
 
-    private function saveCachedSummary(string $key, string $dateStart, string $dateEnd, string $text, ?string $provider): void
-    {
+    private function saveCachedSummary(
+        string $key,
+        string $dateStart,
+        string $dateEnd,
+        string $text,
+        ?string $provider
+    ): void {
         $stmt = $this->pdo->prepare("
-            INSERT INTO analytics_cache (report_key, date_start, date_end, ai_summary, ai_summary_provider, generated_at)
+            INSERT INTO analytics_cache
+                (report_key, date_start, date_end, ai_summary, ai_summary_provider, generated_at)
             VALUES (?, ?, ?, ?, ?, NOW())
-            ON DUPLICATE KEY UPDATE ai_summary = VALUES(ai_summary), ai_summary_provider = VALUES(ai_summary_provider)
+            ON DUPLICATE KEY UPDATE
+                ai_summary          = VALUES(ai_summary),
+                ai_summary_provider = VALUES(ai_summary_provider)
         ");
         $stmt->execute([$key, $dateStart, $dateEnd, $text, $provider]);
     }

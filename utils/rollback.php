@@ -2,8 +2,7 @@
 // utils/rollback.php – Rollback the last migration
 // ==================================================
 
-require_once __DIR__ . '/../src/config.php';
-require_once __DIR__ . '/../src/database.php';
+require_once __DIR__ . '/../bootstrap.php';
 
 try {
     $pdo = getDbConnection();

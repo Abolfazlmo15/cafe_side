@@ -569,15 +569,18 @@
 .report-table tbody tr:hover { background: #fcf8f5; }
 .report-table thead th:nth-child(1),
 .report-table tbody td:nth-child(1) {
-    width: 45%;
+    width: 38%;
     white-space: normal;
     word-break: break-word;
     overflow-wrap: anywhere;
+    text-align: left;
 }
 .report-table thead th:nth-child(2),
-.report-table tbody td:nth-child(2) { width: 20%; }
+.report-table tbody td:nth-child(2) { width: 16%; text-align: right; }
 .report-table thead th:nth-child(3),
-.report-table tbody td:nth-child(3) { width: 35%; }
+.report-table tbody td:nth-child(3) { width: 16%; text-align: right; }
+.report-table thead th:nth-child(4),
+.report-table tbody td:nth-child(4) { width: 30%; text-align: right; }
 
 .table-wrap::-webkit-scrollbar { height: 10px; }
 .table-wrap::-webkit-scrollbar-track {
@@ -1005,4 +1008,28 @@
     .report-table tbody td:nth-child(2) { width: 20%; }
     .report-table thead th:nth-child(3),
     .report-table tbody td:nth-child(3) { width: 38%; }
+}
+.weekly-card { margin-bottom: 1.2rem; }
+.weekly-body { padding: 0.4rem 0; }
+.weekly-meta { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem; flex-wrap: wrap; }
+.weekly-badge {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    background: linear-gradient(135deg, #6f4e37, #c08552);
+    color: #fff; padding: 0.2rem 0.7rem; border-radius: 100px;
+    font-size: 0.68rem; font-weight: 800; letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+.weekly-badge i { font-size: 0.7rem; }
+.weekly-when { font-size: 0.75rem; color: #8b6b55; font-weight: 600; }
+.weekly-text { margin: 0; color: #3d2a1a; font-size: 1rem; line-height: 1.75; }
+.weekly-empty {
+    display: flex; align-items: center; gap: 0.7rem;
+    color: #8b6b55; padding: 1.5rem 0.5rem; flex-wrap: wrap;
+}
+.weekly-empty i { color: #6f4e37; font-size: 1.3rem;}
+.day-cell.disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: none;
+    text-decoration: line-through;
 }

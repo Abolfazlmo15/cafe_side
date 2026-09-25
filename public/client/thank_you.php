@@ -2,8 +2,7 @@
 // public/client/thank_you.php – Interactive order review + confirmation
 // ======================================================================
 
-require_once __DIR__ . '/../../src/database.php';
-require_once __DIR__ . '/../../src/layout/ClientLayout.php';
+require_once __DIR__ . '/../../bootstrap.php';
 
 session_start();
 

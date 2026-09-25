@@ -4,11 +4,8 @@
 // Phase 4.1: Vue-rendered list, modal add/edit, no page reloads.
 // Phase 3.2: soft-delete preserves names for historical reports.
 
-require_once __DIR__ . '/../../src/auth.php';
-require_once __DIR__ . '/../../src/database.php';
-require_once __DIR__ . '/../../src/urls.php';
-require_once __DIR__ . '/../../src/api.php';
-require_once __DIR__ . '/../../src/layout/AdminLayout.php';
+require_once __DIR__ . '/../../bootstrap.php';
+require_once SRC_PATH . '/auth.php';
 
 $pdo = getDbConnection();
 

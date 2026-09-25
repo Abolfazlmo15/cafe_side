@@ -10,7 +10,7 @@
 //
 // Requires admin login. Fails loudly if anything is off.
 
-require_once __DIR__ . '/../../src/auth.php';
+require_once __DIR__ . '/../../bootstrap.php';
 
 header('Content-Type: text/plain; charset=utf-8');
 

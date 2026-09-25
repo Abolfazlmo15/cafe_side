@@ -2,8 +2,8 @@
 // utils/migrate.php – CLI migration runner (with --force)
 // =========================================================
 
-require_once __DIR__ . '/../src/config.php';
-require_once __DIR__ . '/../src/database.php';
+require_once __DIR__ . '/../../bootstrap.php';
+
 
 // Check for --force flag
 $force = in_array('--force', $argv);

@@ -2,7 +2,7 @@
 // public/install.php – One‑time installation script
 // ==================================================
 
-require_once __DIR__ . '/../src/config.php';
+require_once __DIR__ . '/../../bootstrap.php';
 
 try {
     $pdo = new PDO("mysql:host=" . DB_HOST, DB_USER, DB_PASS);
@@ -12,7 +12,7 @@ try {
     echo "✅ Database " . DB_NAME . " created or already exists.\n";
 
     $_SERVER['argv'] = ['migrate.php', '--force'];
-    include __DIR__ . '/../utils/migrate.php';
+    include UTILS_PATH . '/migrate.php';
 
     echo "\n🎉 Installation complete. You can now delete this file.\n";
 } catch (PDOException $e) {

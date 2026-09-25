@@ -11,8 +11,8 @@
 // No order is inserted without an explicit confirm=1 POST.
 // ==================================================================
 
-require_once __DIR__ . '/../../src/database.php';
-require_once __DIR__ . '/../../src/api.php';          // ← ADDED
+require_once __DIR__ . '/../../bootstrap.php';
+  // ← ADDED
 session_start();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' && !isset($_GET['cancel'])) {

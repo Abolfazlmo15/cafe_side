@@ -2,33 +2,33 @@
 // public/cron.php
 // =============================================================
 // External trigger for the internal cron dispatcher.
-// Requires ?token= to match CRON_TOKEN in .env.
 //
-// Example:
-//   https://cafe-side.gt.tc/public/cron.php?token=YOUR_TOKEN
-//
-// Returns plain text summary. Delete this file if you ever switch
-// to CLI-only scheduling.
+// HTTP:  /public/cron.php?token=AI_CRON_TOKEN
+// CLI:   php public/cron.php
 
-require_once __DIR__ . '/../src/config.php';
-require_once __DIR__ . '/../src/database.php';
-require_once __DIR__ . '/../utils/cron.php';
+require_once __DIR__ . '/../bootstrap.php';
 
-header('Content-Type: text/plain; charset=utf-8');
+$isCli = (PHP_SAPI === 'cli');
 
-$expectedToken = env('CRON_TOKEN', '');
-$givenToken    = $_GET['token'] ?? '';
+// ── HTTP mode: token check ────────────────────────────────────
+if (!$isCli) {
+    header('Content-Type: text/plain; charset=utf-8');
 
-if ($expectedToken === '' || !hash_equals($expectedToken, $givenToken)) {
-    http_response_code(403);
-    echo "Forbidden\n";
-    exit;
+    $expectedToken = env('AI_CRON_TOKEN', '');
+    $givenToken    = $_GET['token'] ?? '';
+
+    if ($expectedToken === '' || !hash_equals($expectedToken, $givenToken)) {
+        http_response_code(403);
+        echo "Forbidden\n";
+        exit;
+    }
 }
+// ── CLI mode: no token needed ─────────────────────────────────
 
 try {
     $pdo    = getDbConnection();
-    $tasks  = require __DIR__ . '/../config/cron.php';
-    $runner = new CronDispatcher($pdo, $tasks, $expectedToken);
+    $tasks  = require CONFIG_PATH . '/cron.php';
+    $runner = new CronDispatcher($pdo, $tasks, env('AI_CRON_TOKEN', ''));
 
     $results = $runner->run();
 
@@ -55,6 +55,8 @@ try {
     echo "\nSummary: {$ran} ran, {$skipped} not due, {$failed} failed, {$disabled} disabled\n";
     echo "\nDone.\n";
 } catch (Throwable $e) {
-    http_response_code(500);
+    if (!$isCli) {
+        http_response_code(500);
+    }
     echo "Error: " . $e->getMessage() . "\n";
 }

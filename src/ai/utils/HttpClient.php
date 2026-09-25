@@ -2,11 +2,11 @@
 // src/ai/utils/HttpClient.php
 // =============================================================
 // Minimal HTTP client. Uses cURL if available, falls back to
-// file_get_contents with stream context otherwise. Both paths
+// file_get_contents with a stream context otherwise. Both paths
 // return the same shape so providers never need to know which
 // was used.
 //
-// IPv4 enforcement (added):
+// IPv4 enforcement:
 //   On Windows/XAMPP, PHP's resolver returns IPv6 addresses first.
 //   Many shared hosts (and some home routers) drop IPv6 traffic
 //   silently, causing cURL to hang until the connect timeout fires
@@ -15,18 +15,18 @@
 //
 // Return shape (every request):
 //   [
-//     'ok'         => bool,   // 2xx?
-//     'status'     => int,    // HTTP status, 0 on transport failure
-//     'body'       => string, // raw response body
-//     'headers'    => array,  // response headers, lowercase keys
-//     'error'      => ?string // transport error message, null on success
-//     'latency_ms' => int,    // wall-clock time for the request
+//     'ok'         => bool,    // 2xx?
+//     'status'     => int,     // HTTP status, 0 on transport failure
+//     'body'       => string,  // raw response body
+//     'headers'    => array,   // response headers, lowercase keys
+//     'error'      => ?string, // transport error, null on success
+//     'latency_ms' => int,     // wall-clock time for the request
 //   ]
 
 class HttpClient
 {
-    private int $timeout;
-    private int $connectTimeout;
+    private int    $timeout;
+    private int    $connectTimeout;
     private string $userAgent;
 
     public function __construct(int $timeout = 30, int $connectTimeout = 10, string $userAgent = 'CafeSideAI/1.0')
@@ -76,11 +76,7 @@ class HttpClient
             CURLOPT_HTTPHEADER     => $headers,
             CURLOPT_USERAGENT      => $this->userAgent,
 
-            // ─── FIX: force IPv4 resolution ───
-            // Windows XP-era behaviour: cURL tries AAAA records first.
-            // When IPv6 isn't routable (home routers, some ISPs, XAMPP
-            // default config) this causes silent timeouts. Forcing IPv4
-            // makes DNS resolution reliable everywhere.
+            // Force IPv4 resolution — see file header comment.
             CURLOPT_IPRESOLVE      => CURL_IPRESOLVE_V4,
         ]);
 
@@ -96,7 +92,8 @@ class HttpClient
         $status     = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $headerSize = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
 
-        curl_close($ch);
+        // Note: curl_close() is a no-op since PHP 8.0 and deprecated in
+        // PHP 8.5. The handle is garbage-collected. We simply don't call it.
 
         if ($raw === false) {
             return [
@@ -135,21 +132,27 @@ class HttpClient
                 'verify_peer'      => true,
                 'verify_peer_name' => true,
             ],
-            // ─── FIX: force IPv4 for stream requests too ───
-            // bindto with an IPv4 wildcard address tells the socket
-            // layer to only attempt IPv4 connections. Same rationale
-            // as CURLOPT_IPRESOLVE above.
             'socket' => [
                 'bindto' => '0.0.0.0:0',
             ],
         ]);
 
-        $respBody     = @file_get_contents($url, false, $ctx);
-        $status       = 0;
-        $respHeaders  = [];
+        $respBody = @file_get_contents($url, false, $ctx);
+        $status   = 0;
+        $respHeaders = [];
 
-        if (isset($http_response_header) && is_array($http_response_header)) {
-            foreach ($http_response_header as $line) {
+        // PHP 8.5 deprecated the $http_response_header magic variable.
+        // Use the new function if available, else fall back to the global.
+        if (function_exists('http_get_last_response_headers')) {
+            $rawLines = http_get_last_response_headers() ?? [];
+        } else {
+            // Pre-8.4 PHP populates $http_response_header automatically
+            // in the local scope of the file_get_contents call above.
+            $rawLines = $http_response_header ?? [];
+        }
+
+        if (is_array($rawLines)) {
+            foreach ($rawLines as $line) {
                 if (preg_match('#^HTTP/\S+\s+(\d+)#', $line, $m)) {
                     $status = (int) $m[1];
                 } elseif (strpos($line, ':') !== false) {

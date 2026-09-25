@@ -1,8 +1,7 @@
 <?php
 // public/client/update_order.php
-require_once __DIR__ . '/../../src/auth.php';
-require_once __DIR__ . '/../../src/database.php';
-require_once __DIR__ . '/../../src/api.php';          // ← ADDED
+require_once __DIR__ . '/../../bootstrap.php';
+require_once SRC_PATH . '/auth.php';        // ← ADDED
 
 $pdo = getDbConnection();
 $orderId = $_POST['id'] ?? $_GET['id'] ?? null;

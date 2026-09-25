@@ -6,10 +6,7 @@
 // is always visible regardless of Vue state. Vue manages the cart;
 // an inline submit handler serializes it into itemsJson before POST.
 
-require_once __DIR__ . '/../../src/database.php';
-require_once __DIR__ . '/../../src/urls.php';
-require_once __DIR__ . '/../../src/layout/ClientLayout.php';
-require_once __DIR__ . '/../../src/api.php';
+require_once __DIR__ . '/../../bootstrap.php';
 
 session_start();
 

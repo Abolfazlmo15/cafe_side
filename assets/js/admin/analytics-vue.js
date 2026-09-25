@@ -1,10 +1,9 @@
 // assets/js/admin/analytics-vue.js
 // Vue 3 analytics dashboard.
-// Phase 4 + 3.2 + AI curation + Jalali calendar + friendly errors.
-// ASCII-only source.
+// Phase 4 + 3.2 + AI curation + Jalali calendar + weekly briefing.
 
 // =============================================================
-// Jalali date utilities - client-side, no dependencies.
+// Jalali utilities
 // =============================================================
 var JalaliUtil = (function () {
     var MONTHS = ['Farvardin','Ordibehesht','Khordad','Tir','Mordad','Shahrivar',
@@ -19,33 +18,19 @@ var JalaliUtil = (function () {
     function isLeapGregorian(gy) {
         return ((gy % 4 === 0) && (gy % 100 !== 0)) || (gy % 400 === 0);
     }
-
     function gToJ(gYear, gMonth, gDay) {
         var gDays = [0,31,59,90,120,151,181,212,243,273,304,334];
-        var gy = gYear - 1600;
-        var gm = gMonth - 1;
-        var gd = gDay - 1;
-
-        var gDayNo = 365 * gy
-            + Math.floor((gy + 3) / 4)
-            - Math.floor((gy + 99) / 100)
-            + Math.floor((gy + 399) / 400);
+        var gy = gYear - 1600, gm = gMonth - 1, gd = gDay - 1;
+        var gDayNo = 365 * gy + Math.floor((gy + 3) / 4) - Math.floor((gy + 99) / 100) + Math.floor((gy + 399) / 400);
         gDayNo += gDays[gm];
         if (gm > 1 && ((gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0)) gDayNo++;
         gDayNo += gd;
-
         var jDayNo = gDayNo - 79;
         var jNp = Math.floor(jDayNo / 12053);
         jDayNo %= 12053;
-
         var jy = 979 + 33 * jNp + 4 * Math.floor(jDayNo / 1461);
         jDayNo %= 1461;
-
-        if (jDayNo >= 366) {
-            jy += Math.floor((jDayNo - 1) / 365);
-            jDayNo = (jDayNo - 1) % 365;
-        }
-
+        if (jDayNo >= 366) { jy += Math.floor((jDayNo - 1) / 365); jDayNo = (jDayNo - 1) % 365; }
         var jMonths = [31,31,31,31,31,31,30,30,30,30,30,29];
         var jm = 1, jd = 1;
         for (var i = 0; i < 12; i++) {
@@ -54,41 +39,27 @@ var JalaliUtil = (function () {
         }
         return [jy, jm, jd];
     }
-
     function jToG(jYear, jMonth, jDay) {
         var jMonths = [31,31,31,31,31,31,30,30,30,30,30,29];
         if (isLeapJalali(jYear)) jMonths[11] = 30;
-
         var jDayNo = 0;
         for (var y = 1; y < jYear; y++) jDayNo += isLeapJalali(y) ? 366 : 365;
         for (var m = 0; m < jMonth - 1; m++) jDayNo += jMonths[m];
         jDayNo += jDay - 1;
-
-        var gEpochDays = 226894;
-        var gDayNo = jDayNo + gEpochDays;
-
+        var gDayNo = jDayNo + 226894;
         var gYear = 1;
         while (gDayNo >= 365) {
-            var daysInYear = isLeapGregorian(gYear) ? 366 : 365;
-            if (gDayNo < daysInYear) break;
-            gDayNo -= daysInYear;
-            gYear++;
+            var diy = isLeapGregorian(gYear) ? 366 : 365;
+            if (gDayNo < diy) break;
+            gDayNo -= diy; gYear++;
         }
-
         var gMonths = [31,28,31,30,31,30,31,31,30,31,30,31];
         if (isLeapGregorian(gYear)) gMonths[1] = 29;
         var gMonth = 1;
-        for (var i = 0; i < 12; i++) {
-            if (gDayNo < gMonths[i]) break;
-            gDayNo -= gMonths[i];
-            gMonth++;
-        }
-        var gDay = gDayNo + 1;
-        return [gYear, gMonth, gDay];
+        for (var i = 0; i < 12; i++) { if (gDayNo < gMonths[i]) break; gDayNo -= gMonths[i]; gMonth++; }
+        return [gYear, gMonth, gDayNo + 1];
     }
-
     function pad2(n) { return n < 10 ? '0' + n : '' + n; }
-
     function isoToParts(iso) {
         if (!iso || typeof iso !== 'string') return null;
         var p = iso.split('-');
@@ -98,47 +69,29 @@ var JalaliUtil = (function () {
         var j = gToJ(gy, gm, gd);
         return { year: j[0], month: j[1], day: j[2] };
     }
-
     function partsToIso(jy, jm, jd) {
         var g = jToG(jy, jm, jd);
         return g[0] + '-' + pad2(g[1]) + '-' + pad2(g[2]);
     }
-
     function daysInMonth(jy, jm) {
         if (jm <= 6) return 31;
         if (jm <= 11) return 30;
         return isLeapJalali(jy) ? 30 : 29;
     }
-
     function firstDayOfWeek(jy, jm) {
         var g = jToG(jy, jm, 1);
-        var d = new Date(g[0], g[1] - 1, g[2]);
-        return d.getDay();
+        return new Date(g[0], g[1] - 1, g[2]).getDay();
     }
-
     return {
-        numeric: function (iso) {
-            var j = isoToParts(iso);
-            if (!j) return iso || '';
-            return j.year + '/' + pad2(j.month) + '/' + pad2(j.day);
-        },
-        long: function (iso) {
-            var j = isoToParts(iso);
-            if (!j) return iso || '';
-            return j.day + ' ' + MONTHS[j.month - 1] + ' ' + j.year;
-        },
-        short: function (iso) {
-            var j = isoToParts(iso);
-            if (!j) return iso || '';
-            return j.day + ' ' + SHORT[j.month - 1];
-        },
+        numeric: function (iso) { var j = isoToParts(iso); if (!j) return iso || ''; return j.year + '/' + pad2(j.month) + '/' + pad2(j.day); },
+        long:    function (iso) { var j = isoToParts(iso); if (!j) return iso || ''; return j.day + ' ' + MONTHS[j.month - 1] + ' ' + j.year; },
+        short:   function (iso) { var j = isoToParts(iso); if (!j) return iso || ''; return j.day + ' ' + SHORT[j.month - 1]; },
         toParts: isoToParts,
         toIso: partsToIso,
         daysInMonth: daysInMonth,
         firstDayOfWeek: firstDayOfWeek,
         isLeapJalali: isLeapJalali,
-        monthName: function (m) { return MONTHS[m - 1] || ''; },
-        monthShort: function (m) { return SHORT[m - 1] || ''; }
+        monthName: function (m) { return MONTHS[m - 1] || ''; }
     };
 })();
 window.JalaliUtil = JalaliUtil;
@@ -149,30 +102,23 @@ window.JalaliUtil = JalaliUtil;
 function friendlyError(raw) {
     if (!raw) return 'Something went wrong. Please try again.';
     var e = String(raw).toLowerCase();
-    if (e.indexOf('no configured providers') !== -1 ||
-        e.indexOf('all providers failed') !== -1) {
+
+    if (e.indexOf('no configured providers') !== -1 || e.indexOf('all providers failed') !== -1)
         return 'The AI service is temporarily unavailable. Please try again in a few minutes.';
-    }
-    if (e.indexOf('too many') !== -1 || e.indexOf('rate limit') !== -1 || e.indexOf('429') !== -1) {
+    if (e.indexOf('too many') !== -1 || e.indexOf('rate limit') !== -1 || e.indexOf('429') !== -1)
         return 'You have reached the hourly AI request limit. Please wait and try again later.';
-    }
-    if (e.indexOf('insufficient balance') !== -1 || e.indexOf('quota') !== -1) {
+    if (e.indexOf('insufficient balance') !== -1 || e.indexOf('quota') !== -1)
         return 'The AI service quota has been exhausted. Please contact the administrator.';
-    }
-    if (e.indexOf('network') !== -1 || e.indexOf('fetch') !== -1) {
-        return 'Connection problem. Please check your network and try again.';
-    }
-    if (e.indexOf('timeout') !== -1) {
+    if (e.indexOf('timeout') !== -1)
         return 'The AI request took too long. Please try again.';
-    }
-    if (e.indexOf('unknown report') !== -1) {
+    if (e.indexOf('unknown report') !== -1)
         return 'This report is not available right now. Please refresh the page.';
-    }
-    if (e.indexOf('invalid start') !== -1 ||
-        e.indexOf('invalid end') !== -1 ||
-        e.indexOf('invalid date') !== -1) {
+    if (e.indexOf('invalid start') !== -1 || e.indexOf('invalid end') !== -1 || e.indexOf('invalid date') !== -1)
         return 'Please choose a valid date range.';
-    }
+    if (e.indexOf('network') !== -1 || e.indexOf('fetch') !== -1 || e.indexOf('connection') !== -1)
+        return 'Connection problem. Please check your network and try again.';
+    if (e.indexOf('server') !== -1)
+        return 'Something went wrong on our end. Please try again in a moment.';
     return 'Something went wrong. Please try again in a few minutes.';
 }
 window.friendlyError = friendlyError;
@@ -182,7 +128,6 @@ window.friendlyError = friendlyError;
 // =============================================================
 function startAnalyticsApp() {
     console.log('[analytics-vue] starting');
-
     if (typeof Vue === 'undefined')   { console.error('[analytics-vue] Vue missing');   return; }
     if (typeof Chart === 'undefined') { console.error('[analytics-vue] Chart missing'); return; }
 
@@ -192,6 +137,8 @@ function startAnalyticsApp() {
     const store = reactive({
         start: initial.start || '',
         end:   initial.end   || '',
+        minDate: initial.minDate || '',
+        maxDate: initial.maxDate || '',
         mode:  initial.mode  || 'sql',
         sqlReports: initial.reports || {},
         aiReports:  null,
@@ -201,16 +148,17 @@ function startAnalyticsApp() {
         aiVisible:   {},
         aiReview: null,
         aiReviewLoading: false,
+        weekly: {
+            latest: initial.weeklySummary || null,
+            loading: false,
+            error: '',
+        },
     });
 
     window.__ANALYTICS_STORE__ = store;
     console.log('[analytics-vue] store ready. Reports:', Object.keys(store.sqlReports));
 
-    // ---- Helpers ----
-
-    function formatNumber(n) {
-        return ('' + n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    }
+    function formatNumber(n) { return ('' + n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 
     const currentReports = computed(function () {
         if (store.mode === 'ai' && store.aiReports) return store.aiReports;
@@ -237,13 +185,12 @@ function startAnalyticsApp() {
         if (store.loading) return;
         store.loading = true;
         try {
-            const url = 'analytics.php?api=reports'
-                + '&mode='  + store.mode
+            const url = 'analytics.php?api=reports&mode=' + store.mode
                 + '&start=' + encodeURIComponent(store.start)
-                + '&end='   + encodeURIComponent(store.end);
+                + '&end=' + encodeURIComponent(store.end);
             const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            const data = await res.json();
+            const data = await res.json().catch(function () { return null; });
+            if (!data) throw new Error('Malformed response from server');
             if (data.mode === 'ai') store.aiReports = data.reports || null;
             else store.sqlReports = data.reports || {};
         } catch (err) {
@@ -257,22 +204,17 @@ function startAnalyticsApp() {
         if (store.loading) return;
         store.loading = true;
         try {
-            const url = 'analytics.php?api=recompute'
-                + '&mode='  + store.mode
+            const url = 'analytics.php?api=recompute&mode=' + store.mode
                 + '&start=' + encodeURIComponent(store.start)
-                + '&end='   + encodeURIComponent(store.end);
+                + '&end=' + encodeURIComponent(store.end);
             const res = await fetch(url, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            const data = await res.json();
-            if (data.mode === 'ai') {
-                store.aiReports = data.reports || null;
-            } else {
-                store.sqlReports = data.reports || {};
-                store.aiReports  = null;
-            }
+            const data = await res.json().catch(function () { return null; });
+            if (!data) throw new Error('Malformed response');
+            if (data.mode === 'ai') store.aiReports = data.reports || null;
+            else { store.sqlReports = data.reports || {}; store.aiReports = null; }
             store.aiSummaries = {};
-            store.aiVisible   = {};
-            store.aiReview    = null;
+            store.aiVisible = {};
+            store.aiReview = null;
         } catch (err) {
             console.error('[analytics-vue] recompute failed:', err);
             alert('Could not refresh the reports. Please check your connection and try again.');
@@ -282,26 +224,36 @@ function startAnalyticsApp() {
     }
 
     function applyRange(days) {
-        const end = new Date();
-        const start = new Date();
-        start.setDate(end.getDate() - (days - 1));
-        store.end   = end.toISOString().slice(0, 10);
-        store.start = start.toISOString().slice(0, 10);
-        store.aiSummaries = {};
-        store.aiVisible   = {};
-        store.aiReview    = null;
-        store.aiReports   = null;
-        fetchReports();
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - (days - 1));
+
+    // Clamp to allowed range
+    if (store.minDate && start < new Date(store.minDate)) start.setTime(new Date(store.minDate).getTime());
+    if (store.maxDate && end   > new Date(store.maxDate)) end.setTime(new Date(store.maxDate).getTime());
+
+    store.end   = end.toISOString().slice(0, 10);
+    store.start = start.toISOString().slice(0, 10);
+    store.aiSummaries = {};
+    store.aiVisible = {};
+    store.aiReview = null;
+    store.aiReports = null;
+    fetchReports();
     }
 
     function applyCustomRange() {
-        if (!store.start || !store.end) return;
-        if (store.start > store.end) { alert('Start date must be before end date.'); return; }
-        store.aiSummaries = {};
-        store.aiVisible   = {};
-        store.aiReview    = null;
-        store.aiReports   = null;
-        fetchReports();
+    if (!store.start || !store.end) return;
+
+    // Clamp both ends silently
+    if (store.minDate && store.start < store.minDate) store.start = store.minDate;
+    if (store.maxDate && store.end   > store.maxDate) store.end   = store.maxDate;
+    if (store.start > store.end) store.start = store.end;
+
+    store.aiSummaries = {};
+    store.aiVisible = {};
+    store.aiReview = null;
+    store.aiReports = null;
+    fetchReports();
     }
 
     function setMode(mode) {
@@ -315,13 +267,13 @@ function startAnalyticsApp() {
 
     async function fetchExplain(key, force) {
         try {
-            const url = 'analytics.php?api=explain'
-                + '&key='   + encodeURIComponent(key)
+            const url = 'analytics.php?api=explain&key=' + encodeURIComponent(key)
                 + '&start=' + encodeURIComponent(store.start)
-                + '&end='   + encodeURIComponent(store.end)
+                + '&end=' + encodeURIComponent(store.end)
                 + (force ? '&force=1' : '');
             const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-            const data = await res.json();
+            const data = await res.json().catch(function () { return null; });
+            if (!data) throw new Error('Malformed response');
             if (data.ok) {
                 store.aiSummaries[key] = { text: data.text || '', provider: data.provider || null, cached: !!data.cached };
             } else {
@@ -344,18 +296,16 @@ function startAnalyticsApp() {
         fetchExplain(key, force);
     }
 
-    // ---- Executive review ----
-
     async function fetchAiReview(force) {
         if (store.aiReviewLoading) return;
         store.aiReviewLoading = true;
         try {
-            const url = 'analytics.php?api=summary_review'
-                + '&start=' + encodeURIComponent(store.start)
-                + '&end='   + encodeURIComponent(store.end)
+            const url = 'analytics.php?api=summary_review&start=' + encodeURIComponent(store.start)
+                + '&end=' + encodeURIComponent(store.end)
                 + (force ? '&force=1' : '');
             const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-            const data = await res.json();
+            const data = await res.json().catch(function () { return null; });
+            if (!data) throw new Error('Malformed response');
             if (data.ok) {
                 store.aiReview = { text: data.text || '', provider: data.provider || null, cached: !!data.cached };
             } else {
@@ -371,6 +321,48 @@ function startAnalyticsApp() {
 
     function regenerateReview() { store.aiReview = null; fetchAiReview(true); }
 
+    // ---- Weekly briefing ----
+
+    async function regenerateWeekly() {
+        if (store.weekly.loading) return;
+        store.weekly.loading = true;
+        store.weekly.error = '';
+        try {
+            const url = 'analytics.php?api=weekly_generate&force=1';
+            const res = await fetch(url, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const data = await res.json().catch(function () { return null; });
+
+            if (!data) {
+                store.weekly.error = 'The server did not respond correctly. Please try again.';
+                return;
+            }
+
+            if (data.ok && data.latest && data.latest.summary) {
+                store.weekly.latest = data.latest;
+                store.weekly.error = '';
+            } else if (data.ok && data.skipped === 'recent') {
+                // A briefing already exists and is fresh.
+                if (data.latest) store.weekly.latest = data.latest;
+                store.weekly.error = '';
+            } else if (data.error) {
+                store.weekly.error = friendlyError(data.error);
+            } else {
+                // Ok but nothing came back. Load the latest row anyway.
+                if (data.latest) {
+                    store.weekly.latest = data.latest;
+                    store.weekly.error = '';
+                } else {
+                    store.weekly.error = 'The briefing could not be generated right now. Please try again.';
+                }
+            }
+        } catch (err) {
+            console.error('[analytics-vue] weekly generate failed:', err);
+            store.weekly.error = friendlyError('network');
+        } finally {
+            store.weekly.loading = false;
+        }
+    }
+
     // ---- Charts ----
 
     const charts = { revenue: null, topItems: null };
@@ -380,23 +372,19 @@ function startAnalyticsApp() {
         if (!canvas) return;
         const trend = currentReports.value.revenue_trend && currentReports.value.revenue_trend.data;
         if (!trend || !Array.isArray(trend.days)) return;
-
         const labels  = trend.days.map(function (d) { return JalaliUtil.short(d.date); });
         const revenue = trend.days.map(function (d) { return d.revenue; });
         const orders  = trend.days.map(function (d) { return d.orders; });
-
         if (charts.revenue) charts.revenue.destroy();
         charts.revenue = new Chart(canvas, {
             type: 'line',
             data: {
                 labels: labels,
                 datasets: [
-                    { label: 'Revenue (T)', data: revenue, borderColor: '#6f4e37',
-                      backgroundColor: 'rgba(111,78,55,0.10)', borderWidth: 2, tension: 0.35,
-                      fill: true, pointRadius: 2, pointHoverRadius: 5, yAxisID: 'y' },
-                    { label: 'Orders', data: orders, borderColor: '#22c55e',
-                      backgroundColor: 'rgba(34,197,94,0)', borderWidth: 2, tension: 0.35,
-                      pointRadius: 2, pointHoverRadius: 5, yAxisID: 'y1' },
+                    { label: 'Revenue (T)', data: revenue, borderColor: '#6f4e37', backgroundColor: 'rgba(111,78,55,0.10)',
+                      borderWidth: 2, tension: 0.35, fill: true, pointRadius: 2, pointHoverRadius: 5, yAxisID: 'y' },
+                    { label: 'Orders', data: orders, borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0)',
+                      borderWidth: 2, tension: 0.35, pointRadius: 2, pointHoverRadius: 5, yAxisID: 'y1' },
                 ],
             },
             options: {
@@ -409,10 +397,8 @@ function startAnalyticsApp() {
                     } } },
                 },
                 scales: {
-                    y:  { position: 'left',  beginAtZero: true,
-                          ticks: { callback: function (v) { return v.toLocaleString(); } } },
-                    y1: { position: 'right', beginAtZero: true,
-                          grid: { drawOnChartArea: false }, ticks: { precision: 0 } },
+                    y:  { position: 'left',  beginAtZero: true, ticks: { callback: function (v) { return v.toLocaleString(); } } },
+                    y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { precision: 0 } },
                     x:  { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 10 } },
                 },
             },
@@ -424,10 +410,8 @@ function startAnalyticsApp() {
         if (!canvas) return;
         const top = currentReports.value.top_items && currentReports.value.top_items.data;
         if (!top || !Array.isArray(top.items)) return;
-
         const labels = top.items.map(function (i) { return i.name; });
         const qty    = top.items.map(function (i) { return i.qty; });
-
         if (charts.topItems) charts.topItems.destroy();
         charts.topItems = new Chart(canvas, {
             type: 'bar',
@@ -464,121 +448,145 @@ function startAnalyticsApp() {
     // ---- Jalali calendar component ----
 
     const JalaliCalendar = {
-        props: ['modelValue'],
-        emits: ['update:modelValue'],
-        template: `
-            <div class="jalali-picker" ref="wrap" @click.stop>
-                <button type="button" class="jalali-picker-btn" @click="toggle">
-                    <i class="fas fa-calendar"></i>
-                    <span>{{ displayValue }}</span>
-                </button>
-                <div v-if="open" class="calendar-popup">
-                    <div class="calendar-header">
-                        <button type="button" @click="prevMonth" aria-label="Previous month">
-                            <i class="fas fa-chevron-left"></i>
-                        </button>
-                        <span class="calendar-title">{{ monthName }} {{ viewYear }}</span>
-                        <button type="button" @click="nextMonth" aria-label="Next month">
-                            <i class="fas fa-chevron-right"></i>
-                        </button>
-                    </div>
-                    <div class="calendar-grid">
-                        <div v-for="name in dayNames" :key="'h-' + name" class="calendar-day-name">{{ name }}</div>
-                        <div v-for="i in firstWeekday" :key="'b-' + i" class="day-cell blank"></div>
-                        <div v-for="day in days" :key="day.iso"
-                             class="day-cell"
-                             :class="{ today: day.isToday, selected: day.isSelected }"
-                             @click="pick(day)">
-                            {{ day.day }}
-                        </div>
-                    </div>
-                    <div class="calendar-footer">
-                        <button type="button" class="calendar-today-btn" @click="jumpToday">
-                            <i class="fas fa-calendar-day"></i> Jump to today
-                        </button>
-                    </div>
+    props: ['modelValue', 'minDate', 'maxDate'],
+    emits: ['update:modelValue'],
+    template: `
+        <div class="jalali-picker" ref="wrap" @click.stop>
+            <button type="button" class="jalali-picker-btn" @click="toggle">
+                <i class="fas fa-calendar"></i>
+                <span>{{ displayValue }}</span>
+            </button>
+            <div v-if="open" class="calendar-popup">
+                <div class="calendar-header">
+                    <button type="button" @click="prevMonth" :disabled="!canGoPrev">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <span class="calendar-title">{{ monthName }} {{ viewYear }}</span>
+                    <button type="button" @click="nextMonth" :disabled="!canGoNext">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+                <div class="calendar-grid">
+                    <div v-for="name in dayNames" :key="'h-' + name" class="calendar-day-name">{{ name }}</div>
+                    <div v-for="i in firstWeekday" :key="'b-' + i" class="day-cell blank"></div>
+                    <div v-for="day in days" :key="day.iso"
+                         class="day-cell"
+                         :class="{
+                             today: day.isToday,
+                             selected: day.isSelected,
+                             disabled: day.isDisabled
+                         }"
+                         @click="pick(day)">{{ day.day }}</div>
+                </div>
+                <div class="calendar-footer">
+                    <button type="button" class="calendar-today-btn" @click="jumpToday">
+                        <i class="fas fa-calendar-day"></i> Jump to latest
+                    </button>
                 </div>
             </div>
-        `,
-        setup(props, { emit }) {
-            const wrap = ref(null);
-            const todayIso = new Date().toISOString().slice(0, 10);
-            const todayJ   = JalaliUtil.toParts(todayIso);
-            const initJ    = props.modelValue ? JalaliUtil.toParts(props.modelValue) : todayJ;
+        </div>
+    `,
+    setup(props, { emit }) {
+        const wrap = ref(null);
+        const todayIso = new Date().toISOString().slice(0, 10);
+        const todayJ = JalaliUtil.toParts(todayIso);
+        const initJ  = props.modelValue ? JalaliUtil.toParts(props.modelValue) : todayJ;
 
-            const state = reactive({
-                year:  initJ ? initJ.year : todayJ.year,
-                month: initJ ? initJ.month : todayJ.month,
-                open: false,
-            });
+        const state = reactive({
+            year:  initJ ? initJ.year  : todayJ.year,
+            month: initJ ? initJ.month : todayJ.month,
+            open:  false,
+        });
 
-            const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+        const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
-            const displayValue = computed(function () {
-                if (!props.modelValue) return 'Select date';
-                return JalaliUtil.numeric(props.modelValue);
-            });
+        // Convert min/max ISO strings to Jalali parts once.
+        const minJ = props.minDate ? JalaliUtil.toParts(props.minDate) : null;
+        const maxJ = props.maxDate ? JalaliUtil.toParts(props.maxDate) : null;
 
-            const monthName    = computed(function () { return JalaliUtil.monthName(state.month); });
-            const viewYear     = computed(function () { return state.year; });
-            const open         = computed(function () { return state.open; });
-            const firstWeekday = computed(function () {
-                return JalaliUtil.firstDayOfWeek(state.year, state.month);
-            });
+        const displayValue = computed(function () {
+            if (!props.modelValue) return 'Select date';
+            return JalaliUtil.numeric(props.modelValue);
+        });
 
-            const days = computed(function () {
-                var out = [];
-                var dim = JalaliUtil.daysInMonth(state.year, state.month);
-                for (var d = 1; d <= dim; d++) {
-                    var iso = JalaliUtil.toIso(state.year, state.month, d);
-                    out.push({
-                        day: d,
-                        iso: iso,
-                        isToday: iso === todayIso,
-                        isSelected: iso === props.modelValue,
-                    });
-                }
-                return out;
-            });
+        const monthName    = computed(function () { return JalaliUtil.monthName(state.month); });
+        const viewYear     = computed(function () { return state.year; });
+        const open         = computed(function () { return state.open; });
+        const firstWeekday = computed(function () { return JalaliUtil.firstDayOfWeek(state.year, state.month); });
 
-            function toggle() { state.open = !state.open; }
-            function prevMonth() {
-                if (state.month === 1) { state.month = 12; state.year--; }
-                else state.month--;
+        // Can we navigate to the previous / next month?
+        const canGoPrev = computed(function () {
+            if (!minJ) return true;
+            if (state.year > minJ.year) return true;
+            if (state.year === minJ.year && state.month > minJ.month) return true;
+            return false;
+        });
+        const canGoNext = computed(function () {
+            if (!maxJ) return true;
+            if (state.year < maxJ.year) return true;
+            if (state.year === maxJ.year && state.month < maxJ.month) return true;
+            return false;
+        });
+
+        const days = computed(function () {
+            const out = [];
+            const dim = JalaliUtil.daysInMonth(state.year, state.month);
+            for (let d = 1; d <= dim; d++) {
+                const iso = JalaliUtil.toIso(state.year, state.month, d);
+                const disabled =
+                    (props.minDate && iso < props.minDate) ||
+                    (props.maxDate && iso > props.maxDate);
+                out.push({
+                    day: d,
+                    iso: iso,
+                    isToday:    iso === todayIso,
+                    isSelected: iso === props.modelValue,
+                    isDisabled: disabled,
+                });
             }
-            function nextMonth() {
-                if (state.month === 12) { state.month = 1; state.year++; }
-                else state.month++;
-            }
-            function pick(day) {
-                emit('update:modelValue', day.iso);
-                state.open = false;
-            }
-            function jumpToday() {
-                var p = JalaliUtil.toParts(todayIso);
-                state.year = p.year;
-                state.month = p.month;
-                emit('update:modelValue', todayIso);
-                state.open = false;
-            }
-            function onDocClick(e) {
-                if (!state.open) return;
-                if (wrap.value && !wrap.value.contains(e.target)) {
-                    state.open = false;
-                }
-            }
+            return out;
+        });
 
-            onMounted(function () { document.addEventListener('click', onDocClick); });
-            onUnmounted(function () { document.removeEventListener('click', onDocClick); });
+        function toggle() { state.open = !state.open; }
 
-            return {
-                wrap: wrap, state: state,
-                displayValue: displayValue, monthName: monthName, viewYear: viewYear,
-                open: open, firstWeekday: firstWeekday, days: days, dayNames: dayNames,
-                toggle: toggle, prevMonth: prevMonth, nextMonth: nextMonth,
-                pick: pick, jumpToday: jumpToday,
-            };
+        function prevMonth() {
+            if (!canGoPrev.value) return;
+            if (state.month === 1) { state.month = 12; state.year--; }
+            else state.month--;
         }
+        function nextMonth() {
+            if (!canGoNext.value) return;
+            if (state.month === 12) { state.month = 1; state.year++; }
+            else state.month++;
+        }
+        function pick(day) {
+            if (day.isDisabled) return;
+            emit('update:modelValue', day.iso);
+            state.open = false;
+        }
+        function jumpToday() {
+            const target = props.maxDate || todayIso;
+            const p = JalaliUtil.toParts(target);
+            if (p) {
+                state.year  = p.year;
+                state.month = p.month;
+            }
+            emit('update:modelValue', target);
+            state.open = false;
+        }
+
+        function onDocClick(e) {
+            if (!state.open) return;
+            if (wrap.value && !wrap.value.contains(e.target)) state.open = false;
+        }
+        onMounted(function () { document.addEventListener('click', onDocClick); });
+        onUnmounted(function () { document.removeEventListener('click', onDocClick); });
+
+        return {
+            wrap, state, displayValue, monthName, viewYear, open, firstWeekday, days, dayNames,
+            canGoPrev, canGoNext, toggle, prevMonth, nextMonth, pick, jumpToday,
+        };
+    }
     };
 
     // ---- Shared sub-components ----
@@ -587,8 +595,7 @@ function startAnalyticsApp() {
         props: ['reportKey'],
         template: `
             <button type="button" class="btn-explain" :disabled="loading" @click="click">
-                <i :class="iconClass"></i>
-                <span>{{ label }}</span>
+                <i :class="iconClass"></i><span>{{ label }}</span>
             </button>
         `,
         setup(props) {
@@ -608,8 +615,7 @@ function startAnalyticsApp() {
                 if (hasSummary.value && isVisible.value) return 'Hide';
                 return 'Explain';
             });
-            return { loading: loading, iconClass: iconClass, label: label,
-                     click: function () { toggleExplain(props.reportKey, false); } };
+            return { loading, iconClass, label, click: function () { toggleExplain(props.reportKey, false); } };
         }
     };
 
@@ -665,11 +671,59 @@ function startAnalyticsApp() {
                 return 'state-ready';
             });
             return {
-                loading: loading, visible: visible, summaryText: summaryText,
-                errorText: errorText, providerText: providerText, stateClass: stateClass,
+                loading, visible, summaryText, errorText, providerText, stateClass,
                 retry:      function () { toggleExplain(props.reportKey, true); },
                 regenerate: function () { toggleExplain(props.reportKey, true); },
             };
+        }
+    };
+
+    // ---- Weekly briefing card ----
+
+    const WeeklySummaryCard = {
+        template: `
+            <div class="report-card weekly-card">
+                <div class="report-title-row">
+                    <h3 class="report-title"><i class="fas fa-newspaper"></i> Weekly Briefing</h3>
+                    <button type="button" class="btn-explain" :disabled="store.weekly.loading" @click="regen">
+                        <i :class="store.weekly.loading ? 'fas fa-circle-notch fa-spin' : 'fas fa-sync'"></i>
+                        <span>{{ store.weekly.loading ? 'Writing...' : 'Regenerate' }}</span>
+                    </button>
+                </div>
+
+                <div v-if="store.weekly.error" class="ai-review-error">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span>{{ store.weekly.error }}</span>
+                    <button type="button" class="ai-summary-retry" @click="regen">Try again</button>
+                </div>
+
+                <div v-else-if="store.weekly.latest" class="weekly-body">
+                    <div class="weekly-meta">
+                        <span class="weekly-badge"><i class="fas fa-wand-magic-sparkles"></i> AI</span>
+                        <span v-if="provider" class="ai-summary-provider">{{ provider }}</span>
+                        <span v-if="whenText" class="weekly-when">{{ whenText }}</span>
+                    </div>
+                    <p class="weekly-text">{{ store.weekly.latest.summary }}</p>
+                </div>
+
+                <div v-else class="weekly-empty">
+                    <i class="fas fa-newspaper"></i>
+                    <span>No briefing yet. Click <strong>Regenerate</strong> to write one now.</span>
+                </div>
+            </div>
+        `,
+        setup() {
+            const provider = computed(function () {
+                if (!store.weekly.latest || !store.weekly.latest.provider) return '';
+                return 'via ' + store.weekly.latest.provider;
+            });
+            const whenText = computed(function () {
+                if (!store.weekly.latest || !store.weekly.latest.generated_at) return '';
+                var d = new Date(store.weekly.latest.generated_at.replace(' ', 'T'));
+                if (isNaN(d.getTime())) return '';
+                return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+            });
+            return { store, provider, whenText, regen: regenerateWeekly };
         }
     };
 
@@ -681,9 +735,17 @@ function startAnalyticsApp() {
             <div class="analytics-toolbar">
                 <div class="toolbar-left">
                     <span class="toolbar-label"><i class="fas fa-calendar"></i> Range:</span>
-                    <JalaliCalendar v-model="store.start"></JalaliCalendar>
+                    
+                    <JalaliCalendar v-model="store.start"
+                                    :minDate="store.minDate"
+                                    :maxDate="store.maxDate"></JalaliCalendar>
+                                    
                     <span class="range-sep">to</span>
-                    <JalaliCalendar v-model="store.end"></JalaliCalendar>
+                    
+                    <JalaliCalendar v-model="store.end"
+                                    :minDate="store.minDate"
+                                    :maxDate="store.maxDate"></JalaliCalendar>
+                                                        
                     <button type="button" class="btn-apply" @click="applyCustom">Apply</button>
                 </div>
                 <div class="toolbar-quick">
@@ -1275,19 +1337,35 @@ function startAnalyticsApp() {
         }
     };
 
-    // ---- Root ----
+    // ---- Root app ----
+    // Layout (fixed: toolbar first, then weekly briefing, then summary):
+    //   Toolbar (range selector)
+    //   Weekly Briefing
+    //   Summary
+    //   Revenue | Top Items
+    //   Orders by Hour
+    //   Least Items | Rising Items
+    //   Item Combos | Fading Items
+    //   Price Tier Shift
 
     const AnalyticsApp = {
         components: {
-            Toolbar: Toolbar, SummaryCard: SummaryCard,
-            RevenueChart: RevenueChart, TopItemsChart: TopItemsChart, HeatmapGrid: HeatmapGrid,
-            LeastItemsTable: LeastItemsTable, RisingItemsTable: RisingItemsTable,
-            ItemCombosTable: ItemCombosTable, FadingItemsTable: FadingItemsTable,
+            Toolbar: Toolbar,
+            WeeklySummaryCard: WeeklySummaryCard,
+            SummaryCard: SummaryCard,
+            RevenueChart: RevenueChart,
+            TopItemsChart: TopItemsChart,
+            HeatmapGrid: HeatmapGrid,
+            LeastItemsTable: LeastItemsTable,
+            RisingItemsTable: RisingItemsTable,
+            ItemCombosTable: ItemCombosTable,
+            FadingItemsTable: FadingItemsTable,
             PriceTierShiftGrid: PriceTierShiftGrid,
         },
         template: `
             <div>
                 <Toolbar></Toolbar>
+                <WeeklySummaryCard></WeeklySummaryCard>
                 <SummaryCard></SummaryCard>
 
                 <div class="report-row-2">
