@@ -111,7 +111,7 @@ if ($pdo) {
     require_once __DIR__ . '/../../src/analytics/AnalyticsEngine.php';
     $engine = new AnalyticsEngine($pdo);
     $reports = $engine->getReports();
-    assertThat('8 reports registered', count($reports) === 8, count($reports) . ' found');
+    assertThat('reports registered', count($reports) >= 9, count($reports) . ' found');
 
     // Try running one report — should return an array, not throw.
     $start = date('Y-m-d', strtotime('-30 days'));

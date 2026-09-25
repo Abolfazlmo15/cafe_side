@@ -15,6 +15,7 @@ require_once __DIR__ . '/reports/ItemCombosReport.php';
 require_once __DIR__ . '/reports/FadingItemsReport.php';
 require_once __DIR__ . '/reports/RisingItemsReport.php';
 require_once __DIR__ . '/reports/PriceTierShiftReport.php';
+require_once __DIR__ . '/reports/AnomalyReport.php';
 
 class AnalyticsEngine
 {
@@ -36,6 +37,7 @@ class AnalyticsEngine
             new FadingItemsReport(),
             new RisingItemsReport(),
             new PriceTierShiftReport(),
+            new AnomalyReport(),
         ];
     }
 

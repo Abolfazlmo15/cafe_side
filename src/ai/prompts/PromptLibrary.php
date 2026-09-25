@@ -407,6 +407,47 @@ TXT;
                     empty($topList) ? '  (none)' : implode("\n", $topList)
                 );
             },
+            'anomalies' => function (array $data, string $dateStart, string $dateEnd): string {
+                    $items  = $data['anomalies'] ?? [];
+                    $win    = (int) ($data['baseline_window'] ?? 7);
+                    $th     = (int) ($data['threshold_pct']   ?? 150);
+                    $reason = $data['reason'] ?? null;
+
+                    if (empty($items)) {
+                        return sprintf(
+                            "Report: Anomalies\nRange: %s to %s\n\n" .
+                            "Status: no anomalies. No day deviated by more than %d%% " .
+                            "from its %d-day rolling baseline.",
+                            Jalali::formatHuman($dateStart), Jalali::formatHuman($dateEnd),
+                            $th, $win
+                        );
+                    }
+
+                    $lines = [];
+                    foreach (array_slice($items, 0, 10) as $i => $a) {
+                        $lines[] = sprintf(
+                            '  %d. %s — %s %s by %d%% (value %s, baseline %s, orders %d vs baseline %d)',
+                            $i + 1,
+                            Jalali::formatHuman($a['date'] ?? ''),
+                            $a['metric'] ?? '?',
+                            ($a['direction'] ?? '') === 'spike' ? 'spiked' : 'dropped',
+                            abs((int) ($a['deviation_pct'] ?? 0)),
+                            number_format((int) ($a['value'] ?? 0)),
+                            number_format((int) ($a['baseline'] ?? 0)),
+                            (int) ($a['orders'] ?? 0),
+                            (int) ($a['baseline_orders'] ?? 0)
+                        );
+                    }
+
+                    return sprintf(
+                        "Report: Anomalies\nRange: %s to %s\n\n" .
+                        "Baseline: %d-day rolling average. Threshold: %d%% deviation.\n\n" .
+                        "Flagged days:\n%s",
+                        Jalali::formatHuman($dateStart), Jalali::formatHuman($dateEnd),
+                        $win, $th, implode("\n", $lines)
+                    );
+            },
+            
         ];
 
         return $cache;

@@ -1033,3 +1033,86 @@
     pointer-events: none;
     text-decoration: line-through;
 }
+/* ============================================================
+   PHASE 6 — Anomaly card
+   ============================================================ */
+
+.anomaly-card {
+    border-left: 4px solid #dc2626;
+    background: linear-gradient(135deg, #fef2f2, #fff);
+    margin-bottom: 1.2rem;
+}
+
+.anomaly-sub {
+    font-size: 0.85rem;
+    color: #8b6b55;
+    margin: -0.4rem 0 1rem 0;
+    line-height: 1.5;
+}
+
+.anomaly-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.anomaly-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 0.75rem;
+    background: #fcf8f5;
+    border: 1px solid #f0e4db;
+    align-items: flex-start;
+}
+
+.anomaly-item.spike {
+    border-left: 3px solid #dc2626;
+}
+.anomaly-item.drop {
+    border-left: 3px solid #f59e0b;
+}
+
+.anomaly-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.anomaly-item.spike .anomaly-icon {
+    background: #fee2e2;
+    color: #dc2626;
+}
+.anomaly-item.drop .anomaly-icon {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.anomaly-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.anomaly-date {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: #2d1b0e;
+    margin-bottom: 2px;
+}
+
+.anomaly-detail {
+    font-size: 0.85rem;
+    color: #5a3f2e;
+    line-height: 1.5;
+}
+
+.anomaly-detail strong {
+    text-transform: capitalize;
+    color: #2d1b0e;
+}

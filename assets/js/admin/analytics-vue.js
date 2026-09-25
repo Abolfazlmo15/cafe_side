@@ -1,6 +1,6 @@
 // assets/js/admin/analytics-vue.js
 // Vue 3 analytics dashboard.
-// Phase 4 + 3.2 + AI curation + Jalali calendar + weekly briefing.
+// Phase 4 + 3.2 + AI curation + Jalali calendar + weekly briefing + Phase 6 anomalies.
 
 // =============================================================
 // Jalali utilities
@@ -224,36 +224,36 @@ function startAnalyticsApp() {
     }
 
     function applyRange(days) {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(end.getDate() - (days - 1));
+        const end = new Date();
+        const start = new Date();
+        start.setDate(end.getDate() - (days - 1));
 
-    // Clamp to allowed range
-    if (store.minDate && start < new Date(store.minDate)) start.setTime(new Date(store.minDate).getTime());
-    if (store.maxDate && end   > new Date(store.maxDate)) end.setTime(new Date(store.maxDate).getTime());
+        // Clamp to allowed range
+        if (store.minDate && start < new Date(store.minDate)) start.setTime(new Date(store.minDate).getTime());
+        if (store.maxDate && end   > new Date(store.maxDate)) end.setTime(new Date(store.maxDate).getTime());
 
-    store.end   = end.toISOString().slice(0, 10);
-    store.start = start.toISOString().slice(0, 10);
-    store.aiSummaries = {};
-    store.aiVisible = {};
-    store.aiReview = null;
-    store.aiReports = null;
-    fetchReports();
+        store.end   = end.toISOString().slice(0, 10);
+        store.start = start.toISOString().slice(0, 10);
+        store.aiSummaries = {};
+        store.aiVisible = {};
+        store.aiReview = null;
+        store.aiReports = null;
+        fetchReports();
     }
 
     function applyCustomRange() {
-    if (!store.start || !store.end) return;
+        if (!store.start || !store.end) return;
 
-    // Clamp both ends silently
-    if (store.minDate && store.start < store.minDate) store.start = store.minDate;
-    if (store.maxDate && store.end   > store.maxDate) store.end   = store.maxDate;
-    if (store.start > store.end) store.start = store.end;
+        // Clamp both ends silently
+        if (store.minDate && store.start < store.minDate) store.start = store.minDate;
+        if (store.maxDate && store.end   > store.maxDate) store.end   = store.maxDate;
+        if (store.start > store.end) store.start = store.end;
 
-    store.aiSummaries = {};
-    store.aiVisible = {};
-    store.aiReview = null;
-    store.aiReports = null;
-    fetchReports();
+        store.aiSummaries = {};
+        store.aiVisible = {};
+        store.aiReview = null;
+        store.aiReports = null;
+        fetchReports();
     }
 
     function setMode(mode) {
@@ -341,13 +341,11 @@ function startAnalyticsApp() {
                 store.weekly.latest = data.latest;
                 store.weekly.error = '';
             } else if (data.ok && data.skipped === 'recent') {
-                // A briefing already exists and is fresh.
                 if (data.latest) store.weekly.latest = data.latest;
                 store.weekly.error = '';
             } else if (data.error) {
                 store.weekly.error = friendlyError(data.error);
             } else {
-                // Ok but nothing came back. Load the latest row anyway.
                 if (data.latest) {
                     store.weekly.latest = data.latest;
                     store.weekly.error = '';
@@ -448,145 +446,143 @@ function startAnalyticsApp() {
     // ---- Jalali calendar component ----
 
     const JalaliCalendar = {
-    props: ['modelValue', 'minDate', 'maxDate'],
-    emits: ['update:modelValue'],
-    template: `
-        <div class="jalali-picker" ref="wrap" @click.stop>
-            <button type="button" class="jalali-picker-btn" @click="toggle">
-                <i class="fas fa-calendar"></i>
-                <span>{{ displayValue }}</span>
-            </button>
-            <div v-if="open" class="calendar-popup">
-                <div class="calendar-header">
-                    <button type="button" @click="prevMonth" :disabled="!canGoPrev">
-                        <i class="fas fa-chevron-left"></i>
-                    </button>
-                    <span class="calendar-title">{{ monthName }} {{ viewYear }}</span>
-                    <button type="button" @click="nextMonth" :disabled="!canGoNext">
-                        <i class="fas fa-chevron-right"></i>
-                    </button>
-                </div>
-                <div class="calendar-grid">
-                    <div v-for="name in dayNames" :key="'h-' + name" class="calendar-day-name">{{ name }}</div>
-                    <div v-for="i in firstWeekday" :key="'b-' + i" class="day-cell blank"></div>
-                    <div v-for="day in days" :key="day.iso"
-                         class="day-cell"
-                         :class="{
-                             today: day.isToday,
-                             selected: day.isSelected,
-                             disabled: day.isDisabled
-                         }"
-                         @click="pick(day)">{{ day.day }}</div>
-                </div>
-                <div class="calendar-footer">
-                    <button type="button" class="calendar-today-btn" @click="jumpToday">
-                        <i class="fas fa-calendar-day"></i> Jump to latest
-                    </button>
+        props: ['modelValue', 'minDate', 'maxDate'],
+        emits: ['update:modelValue'],
+        template: `
+            <div class="jalali-picker" ref="wrap" @click.stop>
+                <button type="button" class="jalali-picker-btn" @click="toggle">
+                    <i class="fas fa-calendar"></i>
+                    <span>{{ displayValue }}</span>
+                </button>
+                <div v-if="open" class="calendar-popup">
+                    <div class="calendar-header">
+                        <button type="button" @click="prevMonth" :disabled="!canGoPrev">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <span class="calendar-title">{{ monthName }} {{ viewYear }}</span>
+                        <button type="button" @click="nextMonth" :disabled="!canGoNext">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                    <div class="calendar-grid">
+                        <div v-for="name in dayNames" :key="'h-' + name" class="calendar-day-name">{{ name }}</div>
+                        <div v-for="i in firstWeekday" :key="'b-' + i" class="day-cell blank"></div>
+                        <div v-for="day in days" :key="day.iso"
+                             class="day-cell"
+                             :class="{
+                                 today: day.isToday,
+                                 selected: day.isSelected,
+                                 disabled: day.isDisabled
+                             }"
+                             @click="pick(day)">{{ day.day }}</div>
+                    </div>
+                    <div class="calendar-footer">
+                        <button type="button" class="calendar-today-btn" @click="jumpToday">
+                            <i class="fas fa-calendar-day"></i> Jump to latest
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
-    `,
-    setup(props, { emit }) {
-        const wrap = ref(null);
-        const todayIso = new Date().toISOString().slice(0, 10);
-        const todayJ = JalaliUtil.toParts(todayIso);
-        const initJ  = props.modelValue ? JalaliUtil.toParts(props.modelValue) : todayJ;
+        `,
+        setup(props, { emit }) {
+            const wrap = ref(null);
+            const todayIso = new Date().toISOString().slice(0, 10);
+            const todayJ = JalaliUtil.toParts(todayIso);
+            const initJ  = props.modelValue ? JalaliUtil.toParts(props.modelValue) : todayJ;
 
-        const state = reactive({
-            year:  initJ ? initJ.year  : todayJ.year,
-            month: initJ ? initJ.month : todayJ.month,
-            open:  false,
-        });
+            const state = reactive({
+                year:  initJ ? initJ.year  : todayJ.year,
+                month: initJ ? initJ.month : todayJ.month,
+                open:  false,
+            });
 
-        const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+            const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
-        // Convert min/max ISO strings to Jalali parts once.
-        const minJ = props.minDate ? JalaliUtil.toParts(props.minDate) : null;
-        const maxJ = props.maxDate ? JalaliUtil.toParts(props.maxDate) : null;
+            const minJ = props.minDate ? JalaliUtil.toParts(props.minDate) : null;
+            const maxJ = props.maxDate ? JalaliUtil.toParts(props.maxDate) : null;
 
-        const displayValue = computed(function () {
-            if (!props.modelValue) return 'Select date';
-            return JalaliUtil.numeric(props.modelValue);
-        });
+            const displayValue = computed(function () {
+                if (!props.modelValue) return 'Select date';
+                return JalaliUtil.numeric(props.modelValue);
+            });
 
-        const monthName    = computed(function () { return JalaliUtil.monthName(state.month); });
-        const viewYear     = computed(function () { return state.year; });
-        const open         = computed(function () { return state.open; });
-        const firstWeekday = computed(function () { return JalaliUtil.firstDayOfWeek(state.year, state.month); });
+            const monthName    = computed(function () { return JalaliUtil.monthName(state.month); });
+            const viewYear     = computed(function () { return state.year; });
+            const open         = computed(function () { return state.open; });
+            const firstWeekday = computed(function () { return JalaliUtil.firstDayOfWeek(state.year, state.month); });
 
-        // Can we navigate to the previous / next month?
-        const canGoPrev = computed(function () {
-            if (!minJ) return true;
-            if (state.year > minJ.year) return true;
-            if (state.year === minJ.year && state.month > minJ.month) return true;
-            return false;
-        });
-        const canGoNext = computed(function () {
-            if (!maxJ) return true;
-            if (state.year < maxJ.year) return true;
-            if (state.year === maxJ.year && state.month < maxJ.month) return true;
-            return false;
-        });
+            const canGoPrev = computed(function () {
+                if (!minJ) return true;
+                if (state.year > minJ.year) return true;
+                if (state.year === minJ.year && state.month > minJ.month) return true;
+                return false;
+            });
+            const canGoNext = computed(function () {
+                if (!maxJ) return true;
+                if (state.year < maxJ.year) return true;
+                if (state.year === maxJ.year && state.month < maxJ.month) return true;
+                return false;
+            });
 
-        const days = computed(function () {
-            const out = [];
-            const dim = JalaliUtil.daysInMonth(state.year, state.month);
-            for (let d = 1; d <= dim; d++) {
-                const iso = JalaliUtil.toIso(state.year, state.month, d);
-                const disabled =
-                    (props.minDate && iso < props.minDate) ||
-                    (props.maxDate && iso > props.maxDate);
-                out.push({
-                    day: d,
-                    iso: iso,
-                    isToday:    iso === todayIso,
-                    isSelected: iso === props.modelValue,
-                    isDisabled: disabled,
-                });
+            const days = computed(function () {
+                const out = [];
+                const dim = JalaliUtil.daysInMonth(state.year, state.month);
+                for (let d = 1; d <= dim; d++) {
+                    const iso = JalaliUtil.toIso(state.year, state.month, d);
+                    const disabled =
+                        (props.minDate && iso < props.minDate) ||
+                        (props.maxDate && iso > props.maxDate);
+                    out.push({
+                        day: d,
+                        iso: iso,
+                        isToday:    iso === todayIso,
+                        isSelected: iso === props.modelValue,
+                        isDisabled: disabled,
+                    });
+                }
+                return out;
+            });
+
+            function toggle() { state.open = !state.open; }
+
+            function prevMonth() {
+                if (!canGoPrev.value) return;
+                if (state.month === 1) { state.month = 12; state.year--; }
+                else state.month--;
             }
-            return out;
-        });
-
-        function toggle() { state.open = !state.open; }
-
-        function prevMonth() {
-            if (!canGoPrev.value) return;
-            if (state.month === 1) { state.month = 12; state.year--; }
-            else state.month--;
-        }
-        function nextMonth() {
-            if (!canGoNext.value) return;
-            if (state.month === 12) { state.month = 1; state.year++; }
-            else state.month++;
-        }
-        function pick(day) {
-            if (day.isDisabled) return;
-            emit('update:modelValue', day.iso);
-            state.open = false;
-        }
-        function jumpToday() {
-            const target = props.maxDate || todayIso;
-            const p = JalaliUtil.toParts(target);
-            if (p) {
-                state.year  = p.year;
-                state.month = p.month;
+            function nextMonth() {
+                if (!canGoNext.value) return;
+                if (state.month === 12) { state.month = 1; state.year++; }
+                else state.month++;
             }
-            emit('update:modelValue', target);
-            state.open = false;
-        }
+            function pick(day) {
+                if (day.isDisabled) return;
+                emit('update:modelValue', day.iso);
+                state.open = false;
+            }
+            function jumpToday() {
+                const target = props.maxDate || todayIso;
+                const p = JalaliUtil.toParts(target);
+                if (p) {
+                    state.year  = p.year;
+                    state.month = p.month;
+                }
+                emit('update:modelValue', target);
+                state.open = false;
+            }
 
-        function onDocClick(e) {
-            if (!state.open) return;
-            if (wrap.value && !wrap.value.contains(e.target)) state.open = false;
-        }
-        onMounted(function () { document.addEventListener('click', onDocClick); });
-        onUnmounted(function () { document.removeEventListener('click', onDocClick); });
+            function onDocClick(e) {
+                if (!state.open) return;
+                if (wrap.value && !wrap.value.contains(e.target)) state.open = false;
+            }
+            onMounted(function () { document.addEventListener('click', onDocClick); });
+            onUnmounted(function () { document.removeEventListener('click', onDocClick); });
 
-        return {
-            wrap, state, displayValue, monthName, viewYear, open, firstWeekday, days, dayNames,
-            canGoPrev, canGoNext, toggle, prevMonth, nextMonth, pick, jumpToday,
-        };
-    }
+            return {
+                wrap, state, displayValue, monthName, viewYear, open, firstWeekday, days, dayNames,
+                canGoPrev, canGoNext, toggle, prevMonth, nextMonth, pick, jumpToday,
+            };
+        }
     };
 
     // ---- Shared sub-components ----
@@ -735,17 +731,17 @@ function startAnalyticsApp() {
             <div class="analytics-toolbar">
                 <div class="toolbar-left">
                     <span class="toolbar-label"><i class="fas fa-calendar"></i> Range:</span>
-                    
+
                     <JalaliCalendar v-model="store.start"
                                     :minDate="store.minDate"
                                     :maxDate="store.maxDate"></JalaliCalendar>
-                                    
+
                     <span class="range-sep">to</span>
-                    
+
                     <JalaliCalendar v-model="store.end"
                                     :minDate="store.minDate"
                                     :maxDate="store.maxDate"></JalaliCalendar>
-                                                        
+
                     <button type="button" class="btn-apply" @click="applyCustom">Apply</button>
                 </div>
                 <div class="toolbar-quick">
@@ -870,6 +866,60 @@ function startAnalyticsApp() {
                 setMode: setMode,
                 regen: regenerateReview,
             };
+        }
+    };
+
+    // ---- Anomaly card (Phase 6) ----
+
+    const AnomalyCard = {
+        components: { AiExplainButton: AiExplainButton, AiSummaryCard: AiSummaryCard },
+        template: `
+            <div v-if="hasAnomalies" class="report-card anomaly-card">
+                <div class="report-title-row">
+                    <h3 class="report-title"><i class="fas fa-triangle-exclamation"></i> {{ title }}</h3>
+                    <AiExplainButton reportKey="anomalies"></AiExplainButton>
+                </div>
+                <p v-if="thresholdInfo" class="anomaly-sub">{{ thresholdInfo }}</p>
+                <div class="anomaly-list">
+                    <div v-for="(a, i) in anomalies" :key="i" class="anomaly-item" :class="a.direction">
+                        <div class="anomaly-icon">
+                            <i :class="a.direction === 'spike' ? 'fas fa-arrow-up' : 'fas fa-arrow-down'"></i>
+                        </div>
+                        <div class="anomaly-body">
+                            <div class="anomaly-date">{{ jalaliDate(a.date) }}</div>
+                            <div class="anomaly-detail">
+                                <strong>{{ a.metric }}</strong>
+                                <span> {{ a.direction === 'spike' ? 'up' : 'down' }} {{ Math.abs(a.deviation_pct) }}%</span>
+                                — {{ formatNumber(a.value) }} vs. baseline {{ formatNumber(a.baseline) }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <AiSummaryCard reportKey="anomalies"></AiSummaryCard>
+            </div>
+        `,
+        setup() {
+            const anomalies = computed(function () {
+                const r = currentReports.value.anomalies;
+                const d = r && r.data;
+                return (d && Array.isArray(d.anomalies)) ? d.anomalies : [];
+            });
+            const hasAnomalies = computed(function () { return anomalies.value.length > 0; });
+            const title = computed(function () {
+                const r = currentReports.value.anomalies;
+                return (r && r.title) ? r.title : 'Anomalies Detected';
+            });
+            const thresholdInfo = computed(function () {
+                const r = currentReports.value.anomalies;
+                const d = r && r.data;
+                if (!d) return '';
+                return d.baseline_window + '-day rolling baseline · '
+                     + d.threshold_pct + '% deviation threshold · '
+                     + d.days_analyzed + ' days analyzed';
+            });
+            function jalaliDate(iso) { return JalaliUtil.long(iso); }
+            function formatNumber(n) { return ('' + n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+            return { anomalies, hasAnomalies, title, thresholdInfo, jalaliDate, formatNumber };
         }
     };
 
@@ -1338,8 +1388,9 @@ function startAnalyticsApp() {
     };
 
     // ---- Root app ----
-    // Layout (fixed: toolbar first, then weekly briefing, then summary):
+    // Layout:
     //   Toolbar (range selector)
+    //   Anomaly card (only when anomalies exist)
     //   Weekly Briefing
     //   Summary
     //   Revenue | Top Items
@@ -1351,6 +1402,7 @@ function startAnalyticsApp() {
     const AnalyticsApp = {
         components: {
             Toolbar: Toolbar,
+            AnomalyCard: AnomalyCard,
             WeeklySummaryCard: WeeklySummaryCard,
             SummaryCard: SummaryCard,
             RevenueChart: RevenueChart,
@@ -1365,6 +1417,7 @@ function startAnalyticsApp() {
         template: `
             <div>
                 <Toolbar></Toolbar>
+                <AnomalyCard></AnomalyCard>
                 <WeeklySummaryCard></WeeklySummaryCard>
                 <SummaryCard></SummaryCard>
 

@@ -51,6 +51,7 @@ return [
     'FadingItemsReport'    => SRC_PATH . '/analytics/reports/FadingItemsReport.php',
     'RisingItemsReport'    => SRC_PATH . '/analytics/reports/RisingItemsReport.php',
     'PriceTierShiftReport' => SRC_PATH . '/analytics/reports/PriceTierShiftReport.php',
+    'AnomalyReport'        => SRC_PATH . '/analytics/reports/AnomalyReport.php',
 
     // ── CLI framework ────────────────────────────────────────
     'Output'               => SRC_PATH . '/cli/Output.php',
@@ -69,4 +70,6 @@ return [
 
     // ── Utils ────────────────────────────────────────────────
     'CronDispatcher'       => UTILS_PATH . '/CronDispatcher.php',
+
+
 ];
