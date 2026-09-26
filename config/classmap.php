@@ -71,6 +71,9 @@ return [
 
     // ── Utils ────────────────────────────────────────────────
     'CronDispatcher'       => UTILS_PATH . '/CronDispatcher.php',
-
-
+    
+    'ChatPromptLibrary' => SRC_PATH . '/ai/chat/ChatPromptLibrary.php',
+    'IntentClassifier'  => SRC_PATH . '/ai/chat/IntentClassifier.php',
+    
+    'IntentHandler' => SRC_PATH . '/ai/chat/IntentHandler.php',
 ];
