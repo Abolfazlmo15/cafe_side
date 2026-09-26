@@ -1,6 +1,7 @@
 // assets/js/admin/analytics-vue.js
 // Vue 3 analytics dashboard.
-// Phase 4 + 3.2 + AI curation + Jalali calendar + weekly briefing + Phase 6 anomalies.
+// Phase 4 + 3.2 + AI curation + Jalali calendar + weekly briefing + Phase 6 anomalies
+// + Phase 8 chat-with-data.
 
 // =============================================================
 // Jalali utilities
@@ -228,7 +229,6 @@ function startAnalyticsApp() {
         const start = new Date();
         start.setDate(end.getDate() - (days - 1));
 
-        // Clamp to allowed range
         if (store.minDate && start < new Date(store.minDate)) start.setTime(new Date(store.minDate).getTime());
         if (store.maxDate && end   > new Date(store.maxDate)) end.setTime(new Date(store.maxDate).getTime());
 
@@ -244,7 +244,6 @@ function startAnalyticsApp() {
     function applyCustomRange() {
         if (!store.start || !store.end) return;
 
-        // Clamp both ends silently
         if (store.minDate && store.start < store.minDate) store.start = store.minDate;
         if (store.maxDate && store.end   > store.maxDate) store.end   = store.maxDate;
         if (store.start > store.end) store.start = store.end;
@@ -1387,12 +1386,188 @@ function startAnalyticsApp() {
         }
     };
 
+    // =============================================================
+    // Phase 8 — Chat with Data component
+    // =============================================================
+    // Lives inside startAnalyticsApp so it can close over ref(),
+    // nextTick(), computed(). A module-scope version would throw
+    // ReferenceError on the first line of setup().
+
+    const ChatBox = {
+        template: [
+            '<div class="chat-card">',
+            '  <div class="chat-header">',
+            '    <h3 class="report-title"><i class="fas fa-comments"></i> Ask About Your Data</h3>',
+            '    <button v-if="messages.length" class="chat-clear" @click="clearAll" title="Clear conversation">',
+            '      <i class="fas fa-trash"></i>',
+            '    </button>',
+            '  </div>',
+            '  <div class="chat-messages" ref="messagesEl">',
+            '    <div v-if="!messages.length" class="chat-empty">',
+            '      <i class="fas fa-lightbulb"></i>',
+            '      <p>Ask anything about your café. Try:</p>',
+            '      <div class="chat-suggestions">',
+            '        <button v-for="q in suggestions" :key="q" @click="ask(q)" class="chat-suggestion">{{ q }}</button>',
+            '      </div>',
+            '    </div>',
+            '    <div v-for="(m, i) in messages" :key="i" class="chat-msg" :class="\'chat-msg-\' + m.role">',
+            '      <div class="chat-msg-bubble">',
+            '        <div v-if="m.loading" class="chat-loading">',
+            '          <i class="fas fa-circle-notch fa-spin"></i>',
+            '          <span>{{ m.text || \'Analyzing your data…\' }}</span>',
+            '        </div>',
+            '        <template v-else>',
+            '          <p>{{ m.text }}</p>',
+            '          <div v-if="m.meta" class="chat-meta">',
+            '            <span v-if="m.meta.intent" class="chat-meta-chip">{{ m.meta.intent }}</span>',
+            '            <span v-if="m.meta.range" class="chat-meta-range">{{ m.meta.range }}</span>',
+            '            <span v-if="m.meta.provider" class="chat-meta-provider">via {{ m.meta.provider }}</span>',
+            '          </div>',
+            '        </template>',
+            '      </div>',
+            '    </div>',
+            '  </div>',
+            '  <form @submit.prevent="submit" class="chat-input-row">',
+            '    <input',
+            '      type="text"',
+            '      v-model="draft"',
+            '      placeholder="e.g. What sold best this month?"',
+            '      :disabled="loading"',
+            '      maxlength="500"',
+            '      class="chat-input"',
+            '      ref="inputEl"',
+            '    >',
+            '    <button type="submit" class="chat-send" :disabled="loading || !draft.trim()">',
+            '      <i :class="loading ? \'fas fa-circle-notch fa-spin\' : \'fas fa-paper-plane\'"></i>',
+            '    </button>',
+            '  </form>',
+            '</div>',
+        ].join('\n'),
+        setup() {
+            // Load any existing history from the bootstrap payload
+            const initialData = window.__ANALYTICS_DATA__ || {};
+            const historyArr = Array.isArray(initialData.chatHistory) ? initialData.chatHistory : [];
+
+            const messages = ref(historyArr.map(function (m) {
+                return {
+                    role: m.role === 'assistant' ? 'assistant' : 'user',
+                    text: m.text || '',
+                    meta: m.meta && m.meta.range ? m.meta : buildMetaFromServer(m.meta),
+                };
+            }));
+
+            const draft    = ref('');
+            const loading  = ref(false);
+            const inputEl  = ref(null);
+            const messagesEl = ref(null);
+
+            const suggestions = [
+                'What sold best this month?',
+                'How much did I make this week?',
+                'When am I busiest?',
+                'Compare this week to last week',
+                'Anything unusual recently?',
+            ];
+
+            function buildMetaFromServer(meta) {
+                if (!meta) return null;
+                return {
+                    intent:   meta.intent || '',
+                    range:    formatRangeFromIso(meta.date_start, meta.date_end),
+                    provider: meta.provider || '',
+                };
+            }
+
+            function formatRangeFromIso(start, end) {
+                if (!start || !end) return '';
+                return JalaliUtil.short(start) + ' – ' + JalaliUtil.short(end);
+            }
+
+            function scrollToBottom() {
+                nextTick(function () {
+                    if (messagesEl.value) {
+                        messagesEl.value.scrollTop = messagesEl.value.scrollHeight;
+                    }
+                });
+            }
+
+            async function ask(question) {
+                if (loading.value) return;
+                if (!question || !question.trim()) return;
+
+                question = question.trim();
+                draft.value = '';
+
+                messages.value.push({ role: 'user', text: question });
+
+                const assistantMsg = {
+                    role: 'assistant',
+                    loading: true,
+                    text: 'Analyzing your data…',
+                };
+                messages.value.push(assistantMsg);
+                loading.value = true;
+                scrollToBottom();
+
+                try {
+                    const res = await fetch('analytics.php?api=chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body: 'question=' + encodeURIComponent(question),
+                    });
+                    const data = await res.json();
+
+                    assistantMsg.loading = false;
+
+                    if (data.ok) {
+                        assistantMsg.text = data.text;
+                        assistantMsg.meta = {
+                            intent:   data.intent,
+                            range:    formatRangeFromIso(data.date_start, data.date_end),
+                            provider: data.provider || '',
+                        };
+                    } else {
+                        assistantMsg.text = data.error || 'Something went wrong. Please try again.';
+                        assistantMsg.error = true;
+                    }
+                } catch (err) {
+                    console.error('[chat] fetch failed:', err);
+                    assistantMsg.loading = false;
+                    assistantMsg.text = 'Network error. Please check your connection and try again.';
+                    assistantMsg.error = true;
+                } finally {
+                    loading.value = false;
+                    scrollToBottom();
+                    if (inputEl.value) inputEl.value.focus();
+                }
+            }
+
+            function submit() {
+                ask(draft.value);
+            }
+
+            function clearAll() {
+                messages.value = [];
+                draft.value = '';
+            }
+
+            return {
+                messages, draft, loading, inputEl, messagesEl,
+                suggestions, ask, submit, clearAll,
+            };
+        },
+    };
+
     // ---- Root app ----
     // Layout:
     //   Toolbar (range selector)
     //   Anomaly card (only when anomalies exist)
     //   Weekly Briefing
     //   Summary
+    //   Chat Box                       ← Phase 8 · Step 4
     //   Revenue | Top Items
     //   Orders by Hour
     //   Least Items | Rising Items
@@ -1405,6 +1580,7 @@ function startAnalyticsApp() {
             AnomalyCard: AnomalyCard,
             WeeklySummaryCard: WeeklySummaryCard,
             SummaryCard: SummaryCard,
+            ChatBox: ChatBox,                        // ← Phase 8 · Step 4
             RevenueChart: RevenueChart,
             TopItemsChart: TopItemsChart,
             HeatmapGrid: HeatmapGrid,
@@ -1420,6 +1596,7 @@ function startAnalyticsApp() {
                 <AnomalyCard></AnomalyCard>
                 <WeeklySummaryCard></WeeklySummaryCard>
                 <SummaryCard></SummaryCard>
+                <ChatBox></ChatBox>
 
                 <div class="report-row-2">
                     <RevenueChart></RevenueChart>

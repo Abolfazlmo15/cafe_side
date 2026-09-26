@@ -1,7 +1,11 @@
 <?php
 // public/admin/analytics.php
 // ===================================================================
-// Mode-aware analytics dashboard + weekly briefing.
+// Mode-aware analytics dashboard + weekly briefing + chat with data.
+//
+// Phase 8 · Step 4 — the UI's backend half:
+//   • ?api=chat endpoint runs classifier → handler → narrator
+//   • history preloaded from ai_chat_history into __ANALYTICS_DATA__
 //
 // Defences against the "server did not respond" JSON parse failure:
 //   1. set_time_limit(180)   - gives the AI chain 3 minutes
@@ -215,7 +219,7 @@ if (isset($_GET['api'])) {
             $reportData = $engine->runReport($key, $dateStart, $dateEnd);
             if ($reportData === null) apiRespondJson(['ok' => false, 'error' => 'Unknown report'], 404);
 
-            // NEW: short-circuit empty reports so we never burn an AI call
+            // Short-circuit empty reports so we never burn an AI call
             if (analyticsReportIsEmpty($key, $reportData)) {
                 apiRespondJson([
                     'ok'       => true,
@@ -250,7 +254,6 @@ if (isset($_GET['api'])) {
             $totalQty = 0;
             foreach ($items as $it) $totalQty += (int) ($it['qty'] ?? 0);
 
-            // Short-circuit an empty period too
             if (analyticsReportIsEmpty('revenue_trend', $revenueTrend ?? [])) {
                 apiRespondJson([
                     'ok'       => true,
@@ -272,7 +275,6 @@ if (isset($_GET['api'])) {
         if ($api === 'weekly_generate') {
             $force = !empty($_GET['force']);
 
-            // Weekly range is always the last 7 days, but never before the first order
             $end   = $maxAllowedDate;
             $start = date('Y-m-d', strtotime($end . ' -6 days'));
             if ($start < $minOrderDate) $start = $minOrderDate;
@@ -311,6 +313,110 @@ if (isset($_GET['api'])) {
             ]);
         }
 
+        // ---- POST: chat with data ----------------------------------
+        // Phase 8 · Step 4 — the UI's backend half.
+        // Runs classifier → handler → narrator, saves to history,
+        // returns prose + metadata.
+        if ($api === 'chat') {
+            $question = trim($_POST['question'] ?? $_GET['q'] ?? '');
+
+            if ($question === '') {
+                apiRespondJson(['ok' => false, 'stage' => 'input', 'error' => 'Please type a question.'], 400);
+            }
+
+            if (mb_strlen($question) > 500) {
+                apiRespondJson(['ok' => false, 'stage' => 'input', 'error' => 'Question is too long (max 500 characters).'], 400);
+            }
+
+            try {
+                $t0 = microtime(true);
+
+                $classifier = new IntentClassifier($pdo);
+                $handler    = new IntentHandler($pdo);
+                $narrator   = new ResponseNarrator($pdo);
+
+                // Stage 1 — classify
+                $tCls = microtime(true);
+                $classification = $classifier->classify($question);
+                $clsMs = (int) ((microtime(true) - $tCls) * 1000);
+
+                if (!$classification['ok']) {
+                    apiRespondJson([
+                        'ok'    => false,
+                        'stage' => 'classify',
+                        'error' => $classification['error'] ?? 'Could not understand the question.',
+                    ]);
+                }
+
+                // Stage 2 — handle
+                $tHdl = microtime(true);
+                $handlerResult = $handler->handle($classification['data']);
+                $hdlMs = (int) ((microtime(true) - $tHdl) * 1000);
+
+                if (!$handlerResult['ok']) {
+                    apiRespondJson([
+                        'ok'    => false,
+                        'stage' => 'handle',
+                        'error' => $handlerResult['error'] ?? 'Could not fetch that data.',
+                    ]);
+                }
+
+                // Stage 3 — narrate
+                $tNar = microtime(true);
+                $narration = $narrator->narrate($question, $handlerResult);
+                $narMs = (int) ((microtime(true) - $tNar) * 1000);
+
+                if (!$narration['ok']) {
+                    apiRespondJson([
+                        'ok'    => false,
+                        'stage' => 'narrate',
+                        'error' => $narration['error'] ?? 'Could not generate an answer.',
+                    ]);
+                }
+
+                $totalMs = (int) ((microtime(true) - $t0) * 1000);
+
+                // Save to history. Best-effort — never block the response.
+                try {
+                    $stmt = $pdo->prepare("INSERT INTO ai_chat_history (user_id, role, content, metadata) VALUES (?, ?, ?, ?)");
+                    $stmt->execute([1, 'user', $question, null]);
+                    $stmt->execute([1, 'assistant', $narration['text'], json_encode([
+                        'intent'     => $handlerResult['intent'],
+                        'date_start' => $handlerResult['date_start'] ?? null,
+                        'date_end'   => $handlerResult['date_end']   ?? null,
+                        'provider'   => $narration['provider'] ?? null,
+                        'model'      => $narration['model']    ?? null,
+                        'elapsed_ms' => $totalMs,
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
+                } catch (Throwable $e) {
+                    error_log('chat history save failed: ' . $e->getMessage());
+                }
+
+                apiRespondJson([
+                    'ok'            => true,
+                    'text'          => $narration['text'],
+                    'intent'        => $handlerResult['intent'],
+                    'date_start'    => $handlerResult['date_start']   ?? null,
+                    'date_end'      => $handlerResult['date_end']     ?? null,
+                    'date_start_2'  => $handlerResult['date_start_2'] ?? null,
+                    'date_end_2'    => $handlerResult['date_end_2']   ?? null,
+                    'provider'      => $narration['provider'] ?? null,
+                    'model'         => $narration['model']    ?? null,
+                    'elapsed_ms'    => $totalMs,
+                    'classifier_ms' => $clsMs,
+                    'handler_ms'    => $hdlMs,
+                    'narrator_ms'   => $narMs,
+                ]);
+            } catch (Throwable $e) {
+                error_log('chat endpoint error: ' . $e->getMessage());
+                apiRespondJson([
+                    'ok'    => false,
+                    'stage' => 'exception',
+                    'error' => 'Server error. Please try again.',
+                ], 500);
+            }
+        }
+
         apiRespondJson(['error' => 'Unknown API endpoint'], 404);
 
     } catch (Throwable $e) {
@@ -342,6 +448,41 @@ try {
     error_log('analytics.php could not load latest weekly: ' . $e->getMessage());
 }
 
+// ── Load recent chat history for the chat box ─────────────────
+// Phase 8 · Step 4. Best-effort: if the table is missing or the
+// query fails, the chat box still renders — it just starts empty.
+$chatHistory = [];
+try {
+    $stmt = $pdo->prepare("
+        SELECT role, content, metadata, created_at
+        FROM ai_chat_history
+        WHERE user_id = 1
+        ORDER BY created_at DESC, id DESC
+        LIMIT 10
+    ");
+    $stmt->execute();
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Reverse so oldest is first — the chat box renders top-to-bottom.
+    $rows = array_reverse($rows);
+
+    foreach ($rows as $row) {
+        $meta = null;
+        if (!empty($row['metadata'])) {
+            $meta = json_decode($row['metadata'], true);
+            if (!is_array($meta)) $meta = null;
+        }
+        $chatHistory[] = [
+            'role' => $row['role'],
+            'text' => $row['content'],
+            'meta' => $meta,
+        ];
+    }
+} catch (Throwable $e) {
+    error_log('analytics.php chat history load failed: ' . $e->getMessage());
+    $chatHistory = [];
+}
+
 $layout = new AdminLayout();
 $layout->setTitle('Analytics')->setActive('analytics');
 
@@ -362,7 +503,8 @@ window.__ANALYTICS_DATA__ = {
     maxDate:  <?= json_encode($maxAllowedDate) ?>,
     reports:  <?= json_encode($initialReports, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>,
     mode:     'sql',
-    weeklySummary: <?= json_encode($latestWeekly, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>
+    weeklySummary: <?= json_encode($latestWeekly, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>,
+    chatHistory:   <?= json_encode($chatHistory, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>
 };
 </script>
 
