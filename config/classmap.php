@@ -76,4 +76,6 @@ return [
     'IntentClassifier'  => SRC_PATH . '/ai/chat/IntentClassifier.php',
     
     'IntentHandler' => SRC_PATH . '/ai/chat/IntentHandler.php',
+    'ResponseNarrator' => SRC_PATH . '/ai/chat/ResponseNarrator.php',
+
 ];

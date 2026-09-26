@@ -3,11 +3,15 @@
 // =============================================================
 // Sliding-window rate limiter backed by ai_call_log.
 //
-// Every AI call is logged. Before a call, we count recent
-// successful calls. If the count exceeds the limit, we refuse.
+// v2 — the window is now per-MINUTE, not per-hour.
 //
-// Default: 30 calls per hour. Plenty for a café admin, low enough
-// to catch runaway loops.
+// Two independent checks, both must pass:
+//   - per-minute burst cap    (default 60 / 60s)
+//   - per-day safety cap      (default 1000 / 24h)
+//
+// The per-minute cap matches typical free-tier provider limits.
+// The per-day cap catches runaway loops that stay just under the
+// per-minute threshold.
 
 require_once __DIR__ . '/../../database.php';
 
@@ -23,7 +27,7 @@ class AIRateLimiter
     /**
      * Count successful calls in the last N minutes.
      */
-    public function countRecent(int $minutes = 60): int
+    public function countRecent(int $minutes = 1): int
     {
         $stmt = $this->pdo->prepare("
             SELECT COUNT(*) FROM ai_call_log
@@ -36,10 +40,23 @@ class AIRateLimiter
 
     /**
      * Is another call allowed right now?
+     *
+     * $perMinute — burst cap, default 60
+     * $perDay    — daily safety cap, default 1000
      */
-    public function allow(int $perHour = 30): bool
+    public function allow(int $perMinute = 60, int $perDay = 1000): bool
     {
-        return $this->countRecent(60) < $perHour;
+        // Per-minute burst cap
+        if ($this->countRecent(1) >= $perMinute) {
+            return false;
+        }
+
+        // Per-day safety cap
+        if ($this->countRecent(60 * 24) >= $perDay) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -72,7 +89,7 @@ class AIRateLimiter
     /**
      * Delete log rows older than N days. Called by cron.
      */
-    public function pruneOld(int $days = 30): int
+    public function pruneOld(int $days = 7): int
     {
         $stmt = $this->pdo->prepare("
             DELETE FROM ai_call_log

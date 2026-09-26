@@ -156,10 +156,23 @@ class IntentClassifier
         $json = self::extractFirstJsonObject($text);
 
         if ($json === null) {
+            // Model ignored the JSON instruction. Treat as unknown rather
+            // than failing — the user still gets a graceful response.
             return [
-                'ok'    => false,
-                'error' => 'Classifier returned no JSON object',
-                'raw'   => substr($text, 0, 300),
+                'ok'       => true,
+                'data'     => [
+                    'intent'        => 'unknown',
+                    'intent_raw'    => 'unknown',
+                    'date_preset'   => 'last_30_days',
+                    'date_start'    => date('Y-m-d', strtotime('-29 days')),
+                    'date_end'      => date('Y-m-d'),
+                    'date_start_2'  => null,
+                    'date_end_2'    => null,
+                    'confidence'    => 0.3,
+                    'reasoning'     => 'Model returned non-JSON; defaulted to unknown.',
+                ],
+                'provider' => $result['provider'] ?? null,
+                'model'    => $result['model']    ?? null,
             ];
         }
 
