@@ -163,4 +163,9 @@ abstract class ProviderBase
 
         return null;
     }
+
+    public function setForceRelay(bool $force): void
+    {
+        // Optional — overridden by providers that hold an HttpClient.
+    }
 }

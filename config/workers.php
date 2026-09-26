@@ -13,4 +13,5 @@ return [
     'ai_models'   => 'public/workers/ai_models.php',
     'ai_recovery' => 'public/workers/ai_recovery.php',
     'analytics'   => 'public/workers/analytics.php',
+    // 'ai_proxies' => 'public/workers/ai_proxies.php',
 ];

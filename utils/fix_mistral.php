@@ -78,11 +78,19 @@ if ($default === null) {
     echo "  ✗ No chat model available — check the blocklist\n";
     exit(1);
 }
-if (stripos($default, 'codestral') !== false) {
-    echo "  ✗ STILL PICKING CODESTRAL — the blocklist didn't apply\n";
+// if (stripos($default, 'codestral') !== false) {
+//     echo "  ✗ STILL PICKING CODESTRAL — the blocklist didn't apply\n";
+//     exit(1);
+// }
+// echo "        ✓ Default pick is a chat model\n";
+if (!AIModelCache::isChatModel($default)) {
+    echo "  ✗ STILL PICKING A NON-CHAT MODEL — blocklist didn't apply\n";
+    echo "        Picked: {$default}\n";
     exit(1);
 }
 echo "        ✓ Default pick is a chat model\n";
+
+
 
 // Show what's now available
 $freeModels = $cache->getFreeModels('mistral');

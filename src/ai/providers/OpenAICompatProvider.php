@@ -11,6 +11,10 @@
 //   getModelsEndpoint()   – usually '/models'
 //   getChatEndpoint()     – usually '/chat/completions'
 //   isFreeModel($model)   – how to tell if a model is free
+//
+// Phase 7 — relay support: setForceRelay() flips the underlying
+// HttpClient into relay mode so requests flow through the
+// Cloudflare Worker instead of hitting the provider directly.
 
 require_once __DIR__ . '/ProviderBase.php';
 require_once __DIR__ . '/../utils/HttpClient.php';
@@ -24,20 +28,30 @@ abstract class OpenAICompatProvider extends ProviderBase
      * models. They're moderation classifiers, speech processors,
      * embedding models, or image generators. Passing them to
      * /chat/completions returns garbage (a score, or an error).
+     *
+     * Note: this list mirrors AIModelCache::NON_CHAT_PATTERNS. It is
+     * kept here as well because provider-level filtering needs to
+     * happen even when the cache table is empty or stale.
      */
     private const NON_CHAT_PATTERNS = [
-        'guard',        // llama-prompt-guard
+        'guard',              // llama-prompt-guard
         'moderation',
         'safety',
-        'whisper',      // speech-to-text
-        'tts',          // text-to-speech
-        'embed',        // embeddings
+        'whisper',            // speech-to-text
+        'tts',                // text-to-speech
+        'embed',              // embeddings
         'rerank',
-        'clip',         // vision
+        'clip',               // vision
         'stable-diffusion',
-        'flux',         // image generation
+        'flux',               // image generation
         'sdxl',
-        'playground-v', // image gen variants
+        'playground-v',       // image gen variants
+        'codestral',          // Mistral code model
+        'codellama',          // Meta code model
+        'coder',              // qwen-coder etc
+        '-code',              // mistral-code-latest
+        'code-',
+        'fim',                // fill-in-the-middle variants
     ];
 
     public function __construct(array $config = [])
@@ -49,6 +63,16 @@ abstract class OpenAICompatProvider extends ProviderBase
     abstract protected function getBaseUrl(): string;
     abstract protected function getModelsEndpoint(): string;
     abstract protected function getChatEndpoint(): string;
+
+    /**
+     * Phase 7 — flip this provider's HttpClient into relay mode.
+     * Called by ProviderRegistry only after a direct request has
+     * failed with a network-level error.
+     */
+    public function setForceRelay(bool $force): void
+    {
+        $this->http->setForceRelay($force);
+    }
 
     /**
      * Default: a model is free if its id contains ':free'. Subclasses

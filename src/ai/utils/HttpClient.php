@@ -13,6 +13,25 @@
 //   and report "Could not resolve host". Forcing IPv4 resolution
 //   bypasses the problem entirely.
 //
+// Phase 7 — Cloudflare Worker relay support:
+//   When setForceRelay(true) is called, requests to known AI
+//   provider hosts are rewritten to flow through a Cloudflare
+//   Worker relay. The relay adds the real Authorization header
+//   on the server side, so the PHP app never needs to send keys
+//   over the wire when using the relay.
+//
+//   URL rewriting:
+//     https://api.groq.com/openai/v1/chat/completions
+//       -> https://<relay>/groq/openai/v1/chat/completions
+//
+//   Header rewriting:
+//     Authorization: Bearer <provider-key>   [removed]
+//     X-Relay-Secret: <relay-secret>         [added]
+//
+//   The relay is a fallback, not a default. ProviderRegistry
+//   flips this flag only after a direct request fails with a
+//   network-level error.
+//
 // Return shape (every request):
 //   [
 //     'ok'         => bool,    // 2xx?
@@ -28,12 +47,59 @@ class HttpClient
     private int    $timeout;
     private int    $connectTimeout;
     private string $userAgent;
+    private bool   $forceRelay = false;
 
-    public function __construct(int $timeout = 30, int $connectTimeout = 10, string $userAgent = 'CafeSideAI/1.0')
-    {
+    /**
+     * Map of real provider hostnames to their relay path segments.
+     * Only hosts in this map are eligible for relay rewriting. Any
+     * other host (httpbin, proxy test endpoints, etc.) passes through
+     * untouched even when forceRelay is on.
+     */
+    private const RELAY_HOST_MAP = [
+        'api.groq.com'                  => 'groq',
+        'openrouter.ai'                 => 'openrouter',
+        'api.deepseek.com'              => 'deepseek',
+        'api.mistral.ai'                => 'mistral',
+        'api.together.xyz'              => 'together',
+        'api-inference.huggingface.co'  => 'huggingface',
+    ];
+
+    public function __construct(
+        int $timeout = 30,
+        int $connectTimeout = 10,
+        string $userAgent = 'CafeSideAI/1.0'
+    ) {
         $this->timeout        = $timeout;
         $this->connectTimeout = $connectTimeout;
         $this->userAgent      = $userAgent;
+    }
+
+    /**
+     * Enable or disable relay mode on this instance.
+     * When true, every request to a mapped provider host is
+     * rewritten to flow through the Cloudflare Worker relay.
+     */
+    public function setForceRelay(bool $force): void
+    {
+        $this->forceRelay = $force;
+    }
+
+    public function isForceRelay(): bool
+    {
+        return $this->forceRelay;
+    }
+
+    /**
+     * True when the .env has both AI_RELAY_URL and AI_RELAY_SECRET set.
+     * The caller (ProviderRegistry) uses this to decide whether a
+     * relay retry is even possible.
+     */
+    public static function relayAvailable(): bool
+    {
+        return defined('AI_RELAY_URL')
+            && AI_RELAY_URL !== ''
+            && defined('AI_RELAY_SECRET')
+            && AI_RELAY_SECRET !== '';
     }
 
     public function get(string $url, array $headers = []): array
@@ -46,9 +112,55 @@ class HttpClient
         return $this->request('POST', $url, $headers, $body);
     }
 
+    /**
+     * Rewrite a request URL and its headers to flow through the relay.
+     * Returns [$newUrl, $newHeaders]. If the host isn't in the map,
+     * or the relay isn't configured, returns the inputs unchanged.
+     */
+    private function applyRelay(string $url, array $headers): array
+    {
+        if (!self::relayAvailable()) {
+            return [$url, $headers];
+        }
+
+        $host = parse_url($url, PHP_URL_HOST);
+        if (!is_string($host) || $host === '') {
+            return [$url, $headers];
+        }
+
+        $segment = self::RELAY_HOST_MAP[$host] ?? null;
+        if ($segment === null) {
+            // Not a mapped provider — leave untouched.
+            return [$url, $headers];
+        }
+
+        $path  = parse_url($url, PHP_URL_PATH)  ?: '/';
+        $query = parse_url($url, PHP_URL_QUERY);
+        $queryStr = is_string($query) && $query !== '' ? '?' . $query : '';
+
+        $relayUrl = rtrim(AI_RELAY_URL, '/') . '/' . $segment . $path . $queryStr;
+
+        // Strip the provider Authorization header — the worker adds
+        // its own. Add X-Relay-Secret for the worker to authenticate us.
+        $newHeaders = [];
+        foreach ($headers as $h) {
+            if (stripos($h, 'authorization:') === 0) {
+                continue;
+            }
+            $newHeaders[] = $h;
+        }
+        $newHeaders[] = 'X-Relay-Secret: ' . AI_RELAY_SECRET;
+
+        return [$relayUrl, $newHeaders];
+    }
+
     private function request(string $method, string $url, array $headers, ?string $body): array
     {
         $start = microtime(true);
+
+        if ($this->forceRelay) {
+            [$url, $headers] = $this->applyRelay($url, $headers);
+        }
 
         if (function_exists('curl_init')) {
             $result = $this->requestWithCurl($method, $url, $headers, $body);
@@ -92,8 +204,8 @@ class HttpClient
         $status     = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $headerSize = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
 
-        // Note: curl_close() is a no-op since PHP 8.0 and deprecated in
-        // PHP 8.5. The handle is garbage-collected. We simply don't call it.
+        // curl_close() is a no-op since PHP 8.0 and deprecated in PHP 8.5.
+        // The handle is garbage-collected. We simply don't call it.
 
         if ($raw === false) {
             return [

@@ -94,9 +94,9 @@ if ($pdo) {
 
     // Check for a live call — skip if all are rate-limited.
     $result = $registry->chat([[
-        'role' => 'user',
-        'content' => 'Reply with the single word: ok',
-    ]], ['max_tokens' => 10, 'temperature' => 0.1]);
+    'role' => 'user',
+    'content' => 'Reply with the single word: ok',
+    ]], ['max_tokens' => 200, 'temperature' => 0.1]);
 
     if (!empty($result['ok'])) {
         assertThat('live chat works', true, 'via ' . $result['provider'] . ' (' . $result['model'] . ')');

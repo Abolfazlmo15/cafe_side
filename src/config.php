@@ -105,3 +105,7 @@ if (ENVIRONMENT === 'development') {
     error_reporting(0);
     ini_set('display_errors', '0');
 }
+
+define('AI_RELAY_URL',    env('AI_RELAY_URL', ''));
+define('AI_RELAY_SECRET', env('AI_RELAY_SECRET', ''));
+

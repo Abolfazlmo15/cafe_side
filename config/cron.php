@@ -1,16 +1,10 @@
 <?php
 // config/cron.php
 // =============================================================
-// Schedule for the internal dispatcher (utils/CronDispatcher.php).
+// Schedule for the internal dispatcher.
 //
-// Each entry:
-//   name      unique identifier, also used for the last-run key
-//   url       full URL of the worker to call
-//   interval  seconds between runs
-//   enabled   true / false
-//
-// Updated in Phase 13.6: worker paths now point at the new
-// /public/workers/*.php locations after the restructure.
+// Phase 7: ai_proxies removed (abandoned). The Cloudflare Worker
+// relay needs no local cron task — it runs on Cloudflare's edge.
 
 return [
     [

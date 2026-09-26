@@ -5,13 +5,16 @@
 // them back. The registry uses this to pick default models without
 // hitting the network on every request.
 //
-// Phase 6.5 hardening:
+// Phase 6.5 hardening (v2):
 //   - pickDefaultModel() and getFreeModels() now exclude models that
 //     aren't chat-capable (code completion, embeddings, moderation,
 //     audio, image generation, vision-only). This was triggered by
 //     Mistral returning codestral-2508 as its default pick — a code
 //     model that sorts alphabetically before every chat model and
 //     writes Python-esque prose when asked to narrate a revenue report.
+//   - v2: expanded patterns. Mistral renamed codestral-2508 to
+//     mistral-code-latest. The old 'codestral' pattern missed it, so
+//     '-code', 'code-', 'coder', 'codellama', and 'fim' were added.
 //   - The blocklist is a single class constant, applied to every read
 //     query via a shared helper.
 //   - Added purgeProvider() and purgeNonChatModels() for targeted
@@ -28,23 +31,51 @@ class AIModelCache
      * Matched case-insensitively against model_id. If any pattern is
      * present in the id, the model is excluded from default selection.
      *
-     * Covers: code completion, embeddings, content moderation, audio,
-     * image generation, and vision-only models.
+     * Covers: code completion / code generation, embeddings, content
+     * moderation, safety classifiers, audio, image generation, and
+     * vision-only models.
      */
     private const NON_CHAT_PATTERNS = [
-        'codestral',          // Mistral's code completion model
-        'embed',              // embedding models
-        'moderation',         // content classifiers
-        'guard',              // safety guards (Llama Prompt Guard)
-        'whisper',            // speech-to-text
-        'tts',                // text-to-speech
-        'rerank',             // ranking models
-        'clip',               // vision-language
-        'sdxl',               // image generation (Stable Diffusion XL)
-        'flux',               // image generation
-        'stable-diffusion',   // image generation
-        'playground-v',       // image generation variants
-        'dall-e',             // image generation
+        // ── Code completion / code generation ─────────────────
+        'codestral',
+        'codellama',
+        'coder',
+        '-code',
+        'code-',
+        'fim',
+
+        // ── Embeddings and classifiers ────────────────────────
+        'embed',
+        'moderation',
+        'guard',
+        'rerank',
+
+        // ── Audio ─────────────────────────────────────────────
+        'whisper',
+        'tts',
+
+        // ── Vision and image generation ───────────────────────
+        'clip',
+        'sdxl',
+        'flux',
+        'stable-diffusion',
+        'playground-v',
+        'dall-e',
+
+        // ── Reasoning / chain-of-thought variants ─────────────
+        // These emit a 'reasoning' field and leave 'content' null
+        // unless given a large token budget. Unreliable for short
+        // analytics narrations — exclude.
+        '-note',            // dots-studio/dots-3-note-preview
+        'note-preview',      // direct match as well
+        'thinking',          // various -thinking- variants
+        'reasoning',         // explicit reasoning models
+        '-r1',              // deepseek-r1 and clones
+        '-o1',              // openai o1 family
+        '-o3',              // openai o3 family
+
+        // ── Mistral Labs (require admin enablement) ───────────
+        'labs-',             // labs-leanstral-1-5, etc.
     ];
 
     private PDO $pdo;

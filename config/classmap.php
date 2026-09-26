@@ -52,6 +52,7 @@ return [
     'RisingItemsReport'    => SRC_PATH . '/analytics/reports/RisingItemsReport.php',
     'PriceTierShiftReport' => SRC_PATH . '/analytics/reports/PriceTierShiftReport.php',
     'AnomalyReport'        => SRC_PATH . '/analytics/reports/AnomalyReport.php',
+    // 'ProxyPool' => SRC_PATH . '/ai/proxy/ProxyPool.php',
 
     // ── CLI framework ────────────────────────────────────────
     'Output'               => SRC_PATH . '/cli/Output.php',
